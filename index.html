@@ -1259,11 +1259,16 @@ function renderKlasemen(){
   }
 
   html += `<div class="section-title">3 Terbaik Antar Grup</div><div class="card">`;
-  const thirds = bestThirdTable();
-  if(!thirds.length) html += `<div class="empty-state">Belum tersedia.</div>`;
-  else html += `<table class="standings"><tr><th style="text-align:left;">Tim</th><th>Grup</th><th>SG</th><th>P</th></tr>
-    ${thirds.map((t,i)=>`<tr class="${i<2?'q-third':'q-out'}" onclick="go('teamdetail',{teamId:'${t.id}'})" style="cursor:pointer;"><td style="text-align:left;">${badgeImg(t.id,18,{style:'margin-right:5px;vertical-align:-4px;'})}${t.name}</td><td>${t.group}</td><td>${t.gd>0?'+':''}${t.gd}</td><td class="pts">${t.pts}</td></tr>`).join('')}
-    </table>`;
+  const anyResultYet = STATE.matches.some(m=>m.stage==='GROUP' && m.status==='FINISHED');
+  if(!anyResultYet){
+    html += `<div class="empty-state">Akan tampil setelah ada hasil pertandingan grup yang diinput.</div>`;
+  } else {
+    const thirds = bestThirdTable();
+    if(!thirds.length) html += `<div class="empty-state">Belum tersedia.</div>`;
+    else html += `<table class="standings"><tr><th style="text-align:left;">Tim</th><th>Grup</th><th>SG</th><th>P</th></tr>
+      ${thirds.map((t,i)=>`<tr class="${i<2?'q-third':'q-out'}" onclick="go('teamdetail',{teamId:'${t.id}'})" style="cursor:pointer;"><td style="text-align:left;">${badgeImg(t.id,18,{style:'margin-right:5px;vertical-align:-4px;'})}${t.name}</td><td>${t.group}</td><td>${t.gd>0?'+':''}${t.gd}</td><td class="pts">${t.pts}</td></tr>`).join('')}
+      </table>`;
+  }
   html += `</div>`;
 
   return html;
