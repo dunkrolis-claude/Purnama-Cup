@@ -735,6 +735,7 @@ function render(){
     matchdetail: renderMatchDetail,
     klasemen: renderKlasemen,
     statistik: renderStatistik,
+    teamdetail: renderTeamDetail,
     'admin-teams': renderAdminTeams,
     'admin-players': renderAdminPlayers,
     'admin-settings': renderAdminSettings
@@ -1004,11 +1005,11 @@ function renderMatchDetail(){
       ${statusPill(m.status)}
     </div>
     <div class="scorebig">
-      <div class="teamblock">${badgeImg(m.home,44,{style:'margin-bottom:6px;'})}<div class="nm">${home?home.name:'?'}</div></div>
+      <div class="teamblock" style="cursor:pointer;" onclick="go('teamdetail',{teamId:'${m.home}'})">${badgeImg(m.home,44,{style:'margin-bottom:6px;'})}<div class="nm">${home?home.name:'?'}</div></div>
       <div class="sc">${sc.h}</div>
       <div class="colon">:</div>
       <div class="sc">${sc.a}</div>
-      <div class="teamblock">${badgeImg(m.away,44,{style:'margin-bottom:6px;'})}<div class="nm">${away?away.name:'?'}</div></div>
+      <div class="teamblock" style="cursor:pointer;" onclick="go('teamdetail',{teamId:'${m.away}'})">${badgeImg(m.away,44,{style:'margin-bottom:6px;'})}<div class="nm">${away?away.name:'?'}</div></div>
     </div>
     <div style="text-align:center;" class="muted">${fmtDate(m.date)} · ${m.time}</div>
   </div>`;
@@ -1177,7 +1178,45 @@ async function finishMatch(matchId){
   go('matchdetail',{matchId});
 }
 
-/* ---------- KLASEMEN ---------- */
+/* ---------- TEAM DETAIL (public, read-only) ---------- */
+function renderTeamDetail(){
+  const t = teamById(SUBSTATE.teamId);
+  if(!t) return `<div class="empty-state">Tim tidak ditemukan.</div>`;
+  let html = `<div style="margin-bottom:10px;"><span class="link" onclick="history_backToKlasemen('${t.group}')">← Kembali ke klasemen</span></div>`;
+  html += `<div class="card" style="text-align:center;padding:22px 14px;">
+    ${badgeImg(t.id,76,{style:'margin-bottom:10px;'})}
+    <h2 style="margin:4px 0;">${t.name}</h2>
+    <span class="pill sched">GRUP ${t.group}</span>
+  </div>`;
+
+  const roster = playersOfTeam(t.id).slice().sort((a,b)=> (parseInt(a.number)||999)-(parseInt(b.number)||999));
+  html += `<div class="section-title">Skuad Pemain</div><div class="card">`;
+  if(!roster.length){
+    html += `<div class="empty-state">Roster pemain belum diinput panitia.</div>`;
+  } else {
+    html += roster.map(p=>`
+      <div class="team-row">
+        <div class="iconbtn" style="display:flex;align-items:center;justify-content:center;cursor:default;font-weight:700;">${p.number||'-'}</div>
+        <div style="flex:1;"><div style="font-weight:600;">${p.name}</div><div class="muted">${p.position||'—'}</div></div>
+      </div>`).join('');
+  }
+  html += `</div>`;
+
+  const table = computeGroupTable(t.group);
+  const pos = table.findIndex(x=>x.id===t.id)+1;
+  const row = table[pos-1];
+  if(row){
+    html += `<div class="section-title">Performa Grup ${t.group}</div><div class="card">
+      <table class="standings"><tr><th style="text-align:left;">Pos</th><th>M</th><th>M-S-K</th><th>SG</th><th>P</th></tr>
+        <tr><td style="text-align:left;"><b>${pos}</b></td><td>${row.mp}</td><td>${row.w}-${row.d}-${row.l}</td><td>${row.gd>0?'+':''}${row.gd}</td><td class="pts">${row.pts}</td></tr>
+      </table>
+    </div>`;
+  }
+  return html;
+}
+function history_backToKlasemen(g){ go('klasemen',{kTab:g}); }
+
+
 function renderKlasemen(){
   const tab = SUBSTATE.kTab || 'A';
   let html = `<div class="tabs">${['A','B','C','BAGAN'].map(x=>`<div class="tab ${tab===x?'active':''}" onclick="SUBSTATE.kTab='${x}';render()">${x==='BAGAN'?'BAGAN':'GRUP '+x}</div>`).join('')}</div>`;
@@ -1198,7 +1237,7 @@ function renderKlasemen(){
         if(i<2){ cls='q-auto'; label=complete?'Lolos':'Sementara'; }
         else if(i===2){ cls='q-third'; label = allGroupsComplete() ? (bestThirdTable().slice(0,2).some(x=>x.id===t.id)?'Lolos (3 Terbaik)':'Tersingkir') : 'Kandidat 3 Terbaik'; }
         else { label = complete? 'Tersingkir' : 'Sementara'; }
-        return `<tr class="${cls}">
+        return `<tr class="${cls}" onclick="go('teamdetail',{teamId:'${t.id}'})" style="cursor:pointer;">
           <td style="text-align:left;"><b>${i+1}</b> ${badgeImg(t.id,20,{style:'margin:0 5px -5px 4px;'})}${t.name}</td>
           <td>${t.mp}</td><td>${t.w}-${t.d}-${t.l}</td><td>${t.gd>0?'+':''}${t.gd}</td><td class="pts">${t.pts}</td>
         </tr>`;
@@ -1223,7 +1262,7 @@ function renderKlasemen(){
   const thirds = bestThirdTable();
   if(!thirds.length) html += `<div class="empty-state">Belum tersedia.</div>`;
   else html += `<table class="standings"><tr><th style="text-align:left;">Tim</th><th>Grup</th><th>SG</th><th>P</th></tr>
-    ${thirds.map((t,i)=>`<tr class="${i<2?'q-third':'q-out'}"><td style="text-align:left;">${badgeImg(t.id,18,{style:'margin-right:5px;vertical-align:-4px;'})}${t.name}</td><td>${t.group}</td><td>${t.gd>0?'+':''}${t.gd}</td><td class="pts">${t.pts}</td></tr>`).join('')}
+    ${thirds.map((t,i)=>`<tr class="${i<2?'q-third':'q-out'}" onclick="go('teamdetail',{teamId:'${t.id}'})" style="cursor:pointer;"><td style="text-align:left;">${badgeImg(t.id,18,{style:'margin-right:5px;vertical-align:-4px;'})}${t.name}</td><td>${t.group}</td><td>${t.gd>0?'+':''}${t.gd}</td><td class="pts">${t.pts}</td></tr>`).join('')}
     </table>`;
   html += `</div>`;
 
