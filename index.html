@@ -81,10 +81,10 @@ h1,h2,h3,.display{font-family:'Rajdhani',sans-serif;font-weight:700;letter-spaci
   #shell{border-radius:22px;overflow:hidden;min-height:calc(100vh - 48px);}
 }
 #sidebarnav{display:none;}
-@media(min-width:901px){
+@media(min-width:641px){
   body{padding:28px 0;}
   #shell{
-    max-width:1120px;
+    max-width:1320px;
     display:flex;
     flex-direction:row;
     align-items:stretch;
@@ -95,7 +95,7 @@ h1,h2,h3,.display{font-family:'Rajdhani',sans-serif;font-weight:700;letter-spaci
   #sidebarnav{
     display:flex;
     flex-direction:column;
-    width:236px;
+    width:220px;
     flex-shrink:0;
     background:var(--navy-800);
     border-right:1px solid var(--line);
@@ -103,9 +103,27 @@ h1,h2,h3,.display{font-family:'Rajdhani',sans-serif;font-weight:700;letter-spaci
   }
   #mainpane{flex:1;min-width:0;display:flex;flex-direction:column;}
   #topbar{padding:14px 24px;}
-  #content{max-width:760px;width:100%;margin:0 auto;padding:18px 24px 40px 24px;}
+  #content{max-width:1040px;width:100%;margin:0 auto;padding:18px 28px 40px 28px;}
   #bottomnav{display:none;}
+  .grid-cols-2{display:grid;grid-template-columns:1.4fr 1fr;gap:20px;align-items:start;}
+  .grid-cols-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;align-items:start;}
+  .match-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;}
+  .match-grid .card{margin-bottom:0;}
+  .week-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;}
+  .week-grid .card{margin-bottom:0;}
+  .kpi-row{grid-template-columns:repeat(4,1fr);max-width:640px;}
 }
+@media(min-width:641px) and (max-width:860px){
+  #sidebarnav{width:170px;padding:16px 10px;}
+  .sidenav-item span{font-size:12.5px;}
+  #content{padding:16px 18px 36px 18px;}
+  .grid-cols-2{grid-template-columns:1fr;}
+  .grid-cols-3{grid-template-columns:repeat(2,1fr);}
+}
+.grid-cols-2{display:block;}
+.grid-cols-3{display:block;}
+.match-grid{display:block;}
+.week-grid{display:block;}
 .sidebar-brand{display:flex;align-items:center;gap:10px;padding:2px 6px 18px 6px;border-bottom:1px solid var(--line);margin-bottom:14px;}
 .sidebar-brand img{width:40px;height:40px;border-radius:8px;flex-shrink:0;}
 .sidebar-brand .t1{font-size:13.5px;font-weight:700;color:var(--gold-400);line-height:1.2;}
@@ -331,6 +349,27 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--gold-500
 <div id="modalRoot"></div>
 <div id="toastRoot"></div>
 
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
+  import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBHQO9L5HQdFhjVTL4nQByaYS5fgEaMTi8",
+    authDomain: "purnamacup.firebaseapp.com",
+    projectId: "purnamacup",
+    storageBucket: "purnamacup.firebasestorage.app",
+    messagingSenderId: "994165959741",
+    appId: "1:994165959741:web:b14edbcf54c8a0b0f54e54",
+    measurementId: "G-46PSBMVVBB"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const stateDocRef = doc(db, "pccc", "state");
+
+  window.__fb = { doc, getDoc, setDoc, onSnapshot, stateDocRef };
+  window.dispatchEvent(new Event("firebase-ready"));
+</script>
 <script>
 /* ============================================================
    PURNAMA CILEWO CUP — CONTROL CENTER 2026
@@ -348,8 +387,8 @@ let THEME = 'dark'; // personal, persisted per-device (not shared)
 
 async function loadThemePref(){
   try{
-    const res = await window.storage.get('pccc_theme_pref', false);
-    if(res && res.value) THEME = res.value;
+    const saved = localStorage.getItem('pccc_theme_pref');
+    if(saved) THEME = saved;
   }catch(e){ /* default dark */ }
   applyTheme();
 }
@@ -360,7 +399,7 @@ function applyTheme(){
 async function toggleTheme(){
   THEME = THEME==='light' ? 'dark' : 'light';
   applyTheme();
-  try{ await window.storage.set('pccc_theme_pref', THEME, false); }catch(e){ /* best effort */ }
+  try{ localStorage.setItem('pccc_theme_pref', THEME); }catch(e){ /* best effort */ }
 }
 
 /* ---------- team logos / crests ---------- */
@@ -525,21 +564,43 @@ function generateGroupSchedule(teams, startDateStr){
   return matches;
 }
 
-/* ---------- persistence ---------- */
-async function loadState(){
-  try{
-    const res = await window.storage.get(STORAGE_KEY, true);
-    if(res && res.value){
-      STATE = JSON.parse(res.value);
-      return;
-    }
-  }catch(e){ /* not found or error -> fall through to default */ }
-  STATE = buildDefaultState();
-  await saveState();
+/* ---------- persistence (Firebase Firestore) ---------- */
+function waitForFirebase(timeoutMs){
+  return new Promise((resolve)=>{
+    if(window.__fb){ resolve(true); return; }
+    const timer = setTimeout(()=>{ window.removeEventListener('firebase-ready', handler); resolve(false); }, timeoutMs);
+    function handler(){ clearTimeout(timer); window.removeEventListener('firebase-ready', handler); resolve(true); }
+    window.addEventListener('firebase-ready', handler);
+  });
+}
+function subscribeState(){
+  const { getDoc, setDoc, onSnapshot, stateDocRef } = window.__fb;
+  return new Promise((resolve)=>{
+    let firstLoad = true;
+    onSnapshot(stateDocRef, async (snap)=>{
+      try{
+        if(snap.exists() && snap.data().json){
+          STATE = JSON.parse(snap.data().json);
+        } else if(firstLoad){
+          STATE = buildDefaultState();
+          await setDoc(stateDocRef, { json: JSON.stringify(STATE), updatedAt: Date.now() });
+        }
+      }catch(e){
+        console.error('Gagal membaca data', e);
+        if(firstLoad) STATE = buildDefaultState();
+      }
+      if(firstLoad){ firstLoad = false; resolve(); }
+      else { render(); } // real-time update pushed from another device
+    }, (err)=>{
+      console.error('Firestore error', err);
+      if(firstLoad){ STATE = buildDefaultState(); firstLoad = false; resolve(); }
+    });
+  });
 }
 async function saveState(){
   try{
-    await window.storage.set(STORAGE_KEY, JSON.stringify(STATE), true);
+    const { setDoc, stateDocRef } = window.__fb;
+    await setDoc(stateDocRef, { json: JSON.stringify(STATE), updatedAt: Date.now() });
   }catch(e){
     console.error('Gagal menyimpan data', e);
     toast('⚠ Gagal menyimpan — coba lagi');
@@ -758,6 +819,12 @@ function go(route, sub){
   SUBSTATE = Object.assign({}, sub||{});
   render();
 }
+function isDesktop(){ return window.innerWidth >= 641; }
+let _resizeTimer = null;
+window.addEventListener('resize', ()=>{
+  clearTimeout(_resizeTimer);
+  _resizeTimer = setTimeout(render, 180);
+});
 
 function renderBottomNav(){
   const items = [
@@ -827,41 +894,39 @@ function renderDashboard(){
   const recent = STATE.matches.filter(m=>m.status==='FINISHED')
     .sort((a,b)=> (b.date+b.time).localeCompare(a.date+a.time)).slice(0,4);
 
-  let html = `
+  let mainCol = '';
+  if(live.length){
+    mainCol += `<div class="section-title">Sedang Berlangsung</div><div class="card">${live.map(matchRowHtml).join('')}</div>`;
+  }
+  mainCol += `<div class="section-title">Pertandingan Berikutnya</div>`;
+  mainCol += upcoming ? `<div class="card">${matchRowHtml(upcoming)}</div>` : `<div class="empty-state">Tidak ada jadwal tersisa.</div>`;
+  mainCol += `<div class="section-title">Hasil Terbaru <span class="link" onclick="go('jadwal')" style="font-size:11px;">Lihat semua</span></div>`;
+  mainCol += recent.length ? `<div class="card">${recent.map(matchRowHtml).join('')}</div>` : `<div class="empty-state">Belum ada hasil.</div>`;
+
+  let sideCol = '';
+  sideCol += `<div class="section-title">Klasemen Ringkas <span class="link" onclick="go('klasemen')" style="font-size:11px;">Selengkapnya</span></div>`;
+  sideCol += `<div class="tabs">${['A','B','C'].map(g=>`<div class="tab ${SUBSTATE.dashG===g||(!SUBSTATE.dashG&&g==='A')?'active':''}" onclick="SUBSTATE.dashG='${g}';render()">GRUP ${g}</div>`).join('')}</div>`;
+  const g = SUBSTATE.dashG || 'A';
+  sideCol += `<div class="card">${miniStandingsHtml(g)}</div>`;
+  sideCol += `<div class="section-title">Top Scorer</div>`;
+  sideCol += `<div class="card">${topScorerListHtml(3)}</div>`;
+  if(allGroupsComplete()){
+    sideCol += `<div class="section-title">Bagan 8 Besar</div>`;
+    sideCol += `<div class="card">${bracketPreviewHtml()}</div>`;
+  }
+
+  return `
     ${openingCeremonyBannerHtml()}
     <div class="kpi-row">
       <div class="kpi"><div class="num">${total}</div><div class="lbl">Match</div></div>
       <div class="kpi"><div class="num">${finished}</div><div class="lbl">Selesai</div></div>
       <div class="kpi"><div class="num">${live.length}</div><div class="lbl">Live</div></div>
       <div class="kpi"><div class="num">${belum}</div><div class="lbl">Belum</div></div>
+    </div>
+    <div class="grid-cols-2">
+      <div class="gcol-main">${mainCol}</div>
+      <div class="gcol-side">${sideCol}</div>
     </div>`;
-
-  if(live.length){
-    html += `<div class="section-title">Sedang Berlangsung</div>`;
-    live.forEach(m=> html += matchRowHtml(m));
-    html = html.replace('<div class="kpi-row">', '').length ? html : html; // no-op guard
-  }
-
-  html += `<div class="section-title">Pertandingan Berikutnya</div>`;
-  html += upcoming ? `<div class="card">${matchRowHtml(upcoming)}</div>` : `<div class="empty-state">Tidak ada jadwal tersisa.</div>`;
-
-  html += `<div class="section-title">Hasil Terbaru <span class="link" onclick="go('jadwal')" style="font-size:11px;">Lihat semua</span></div>`;
-  html += recent.length ? `<div class="card">${recent.map(matchRowHtml).join('')}</div>` : `<div class="empty-state">Belum ada hasil.</div>`;
-
-  html += `<div class="section-title">Klasemen Ringkas <span class="link" onclick="go('klasemen')" style="font-size:11px;">Selengkapnya</span></div>`;
-  html += `<div class="tabs">${['A','B','C'].map(g=>`<div class="tab ${SUBSTATE.dashG===g||(!SUBSTATE.dashG&&g==='A')?'active':''}" onclick="SUBSTATE.dashG='${g}';render()">GRUP ${g}</div>`).join('')}</div>`;
-  const g = SUBSTATE.dashG || 'A';
-  html += `<div class="card">${miniStandingsHtml(g)}</div>`;
-
-  html += `<div class="section-title">Top Scorer</div>`;
-  html += `<div class="card">${topScorerListHtml(3)}</div>`;
-
-  if(allGroupsComplete()){
-    html += `<div class="section-title">Bagan 8 Besar</div>`;
-    html += `<div class="card">${bracketPreviewHtml()}</div>`;
-  }
-
-  return html;
 }
 function matchRowHtml(m){
   const sc = scoreOfMatch(m);
@@ -928,13 +993,16 @@ function renderJadwal(){
     byWeek[key] = byWeek[key]||[];
     byWeek[key].push(m);
   });
+  html += `<div class="week-grid">`;
   Object.keys(byWeek).forEach(week=>{
-    html += `<div class="section-title">${week}</div><div class="card">`;
+    html += `<div>`;
+    html += `<div class="section-title" style="margin-top:6px;">${week}</div><div class="card">`;
     byWeek[week].sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time)).forEach(m=>{
       html += matchRowHtmlAdmin(m);
     });
-    html += `</div>`;
+    html += `</div></div>`;
   });
+  html += `</div>`;
   if(!filtered.length) html += `<div class="empty-state">Belum ada jadwal.</div>`;
   return html;
 }
@@ -1217,19 +1285,11 @@ function renderTeamDetail(){
 function history_backToKlasemen(g){ go('klasemen',{kTab:g}); }
 
 
-function renderKlasemen(){
-  const tab = SUBSTATE.kTab || 'A';
-  let html = `<div class="tabs">${['A','B','C','BAGAN'].map(x=>`<div class="tab ${tab===x?'active':''}" onclick="SUBSTATE.kTab='${x}';render()">${x==='BAGAN'?'BAGAN':'GRUP '+x}</div>`).join('')}</div>`;
-
-  if(tab==='BAGAN'){
-    html += renderBracketFull();
-    return html;
-  }
-
-  const g = tab;
+function groupStandingsCardHtml(g){
   const table = computeGroupTable(g);
   const complete = isGroupComplete(g);
-  html += `<div class="card">
+  return `<div class="card">
+    <div class="muted" style="font-weight:700;margin-bottom:6px;">GRUP ${g}</div>
     <table class="standings">
       <tr><th style="text-align:left;">Pos</th><th>M</th><th>M-S-K</th><th>SG</th><th>P</th></tr>
       ${table.map((t,i)=>{
@@ -1248,17 +1308,9 @@ function renderKlasemen(){
       <span><i style="background:var(--gold-500);"></i>Peringkat 3 (race)</span>
     </div>
   </div>`;
-
-  if(IS_ADMIN){
-    const ov = STATE.settings.manualOverride[g];
-    html += `<div class="card">
-      <label>Override Peringkat Manual (Keputusan Panitia)</label>
-      ${ov? `<p class="muted">Aktif — Alasan: ${ov.reason}</p><button class="btn btn-outline btn-sm" onclick="clearOverride('${g}')">Hapus Override</button>`
-          : `<button class="btn btn-outline btn-sm" onclick="openOverrideModal('${g}')">Atur Override</button>`}
-    </div>`;
-  }
-
-  html += `<div class="section-title">3 Terbaik Antar Grup</div><div class="card">`;
+}
+function bestThirdCardHtml(){
+  let html = `<div class="section-title">3 Terbaik Antar Grup</div><div class="card">`;
   const anyResultYet = STATE.matches.some(m=>m.stage==='GROUP' && m.status==='FINISHED');
   if(!anyResultYet){
     html += `<div class="empty-state">Akan tampil setelah ada hasil pertandingan grup yang diinput.</div>`;
@@ -1270,9 +1322,48 @@ function renderKlasemen(){
       </table>`;
   }
   html += `</div>`;
+  return html;
+}
+function overrideCardHtml(g){
+  if(!IS_ADMIN) return '';
+  const ov = STATE.settings.manualOverride[g];
+  return `<div class="card">
+    <label>Override Peringkat Grup ${g} (Keputusan Panitia)</label>
+    ${ov? `<p class="muted">Aktif — Alasan: ${ov.reason}</p><button class="btn btn-outline btn-sm" onclick="clearOverride('${g}')">Hapus Override</button>`
+        : `<button class="btn btn-outline btn-sm" onclick="openOverrideModal('${g}')">Atur Override</button>`}
+  </div>`;
+}
+function renderKlasemen(){
+  if(isDesktop()){
+    const tab = SUBSTATE.kTab==='BAGAN' ? 'BAGAN' : 'ALL';
+    let html = `<div class="tabs">
+      <div class="tab ${tab==='ALL'?'active':''}" onclick="SUBSTATE.kTab='A';render()">KLASEMEN</div>
+      <div class="tab ${tab==='BAGAN'?'active':''}" onclick="SUBSTATE.kTab='BAGAN';render()">BAGAN 8 BESAR</div>
+    </div>`;
+    if(tab==='BAGAN'){ html += renderBracketFull(); return html; }
+    html += `<div class="grid-cols-3">${['A','B','C'].map(groupStandingsCardHtml).join('')}</div>`;
+    if(IS_ADMIN){
+      html += `<div class="grid-cols-3">${['A','B','C'].map(overrideCardHtml).join('')}</div>`;
+    }
+    html += bestThirdCardHtml();
+    return html;
+  }
+
+  const tab = SUBSTATE.kTab || 'A';
+  let html = `<div class="tabs">${['A','B','C','BAGAN'].map(x=>`<div class="tab ${tab===x?'active':''}" onclick="SUBSTATE.kTab='${x}';render()">${x==='BAGAN'?'BAGAN':'GRUP '+x}</div>`).join('')}</div>`;
+
+  if(tab==='BAGAN'){
+    html += renderBracketFull();
+    return html;
+  }
+
+  html += groupStandingsCardHtml(tab);
+  html += overrideCardHtml(tab);
+  html += bestThirdCardHtml();
 
   return html;
 }
+
 function openOverrideModal(g){
   const table = computeGroupTable(g);
   showModal(`
@@ -1444,49 +1535,63 @@ async function generateFinal(){
 }
 
 /* ---------- STATISTIK ---------- */
+function topScorerCardHtml(){
+  return `<div class="section-title">Top Skorer</div><div class="card">${topScorerListHtml()}</div>`;
+}
+function cardsCardHtml(){
+  const counts = {};
+  STATE.events.forEach(e=>{
+    if(e.type!=='YELLOW_CARD' && e.type!=='RED_CARD') return;
+    const m = matchById(e.matchId); if(!m || m.status!=='FINISHED') return;
+    counts[e.playerId] = counts[e.playerId] || {y:0,r:0};
+    if(e.type==='YELLOW_CARD') counts[e.playerId].y++; else counts[e.playerId].r++;
+  });
+  const rows = Object.entries(counts).sort((a,b)=>(b[1].y+b[1].r*2)-(a[1].y+a[1].r*2));
+  let html = `<div class="section-title">Kartu</div><div class="card">`;
+  if(!rows.length) html += `<div class="empty-state">Belum ada kartu tercatat.</div>`;
+  else html += `<table class="standings"><tr><th style="text-align:left;">Pemain</th><th>Tim</th><th>🟨</th><th>🟥</th></tr>
+    ${rows.map(([pid,c])=>{ const p=STATE.players.find(pp=>pp.id===pid); if(!p) return ''; return `<tr><td style="text-align:left;">${p.name}</td><td>${teamName(p.teamId)}</td><td>${c.y}</td><td>${c.r}</td></tr>`; }).join('')}
+    </table>`;
+  html += `</div>`;
+  return html;
+}
+function gkCardHtml(){
+  const rows = STATE.teams.map(t=>{
+    const ms = STATE.matches.filter(m=>(m.home===t.id||m.away===t.id) && m.status==='FINISHED');
+    let mp=0, ga=0, cs=0;
+    ms.forEach(m=>{
+      const sc = scoreOfMatch(m);
+      mp++;
+      const conceded = m.home===t.id? sc.a : sc.h;
+      ga += conceded;
+      if(conceded===0) cs++;
+    });
+    return {name:t.name, mp, ga, cs};
+  }).sort((a,b)=> a.ga-b.ga);
+  let html = `<div class="section-title">Data GK</div><div class="card">`;
+  html += `<table class="standings"><tr><th style="text-align:left;">Tim</th><th>Main</th><th>Kebobolan</th><th>Clean Sheet</th></tr>
+    ${rows.map(r=>`<tr><td style="text-align:left;">${r.name}</td><td>${r.mp}</td><td>${r.ga}</td><td>${r.cs}</td></tr>`).join('')}
+    </table>`;
+  html += `</div><p class="hint">GK Terbaik tetap merupakan keputusan panitia berdasarkan data pendukung ini.</p>`;
+  return html;
+}
 function renderStatistik(){
+  if(isDesktop()){
+    return `<div class="grid-cols-3">
+      <div>${topScorerCardHtml()}</div>
+      <div>${cardsCardHtml()}</div>
+      <div>${gkCardHtml()}</div>
+    </div>`;
+  }
   const tab = SUBSTATE.sTab || 'scorer';
   let html = `<div class="tabs">
     <div class="tab ${tab==='scorer'?'active':''}" onclick="SUBSTATE.sTab='scorer';render()">TOP SKORER</div>
     <div class="tab ${tab==='cards'?'active':''}" onclick="SUBSTATE.sTab='cards';render()">KARTU</div>
     <div class="tab ${tab==='gk'?'active':''}" onclick="SUBSTATE.sTab='gk';render()">DATA GK</div>
   </div>`;
-  if(tab==='scorer'){
-    html += `<div class="card">${topScorerListHtml()}</div>`;
-  } else if(tab==='cards'){
-    const counts = {};
-    STATE.events.forEach(e=>{
-      if(e.type!=='YELLOW_CARD' && e.type!=='RED_CARD') return;
-      const m = matchById(e.matchId); if(!m || m.status!=='FINISHED') return;
-      counts[e.playerId] = counts[e.playerId] || {y:0,r:0};
-      if(e.type==='YELLOW_CARD') counts[e.playerId].y++; else counts[e.playerId].r++;
-    });
-    const rows = Object.entries(counts).sort((a,b)=>(b[1].y+b[1].r*2)-(a[1].y+a[1].r*2));
-    html += `<div class="card">`;
-    if(!rows.length) html += `<div class="empty-state">Belum ada kartu tercatat.</div>`;
-    else html += `<table class="standings"><tr><th style="text-align:left;">Pemain</th><th>Tim</th><th>🟨</th><th>🟥</th></tr>
-      ${rows.map(([pid,c])=>{ const p=STATE.players.find(pp=>pp.id===pid); if(!p) return ''; return `<tr><td style="text-align:left;">${p.name}</td><td>${teamName(p.teamId)}</td><td>${c.y}</td><td>${c.r}</td></tr>`; }).join('')}
-      </table>`;
-    html += `</div>`;
-  } else {
-    html += `<div class="card">`;
-    const rows = STATE.teams.map(t=>{
-      const ms = STATE.matches.filter(m=>(m.home===t.id||m.away===t.id) && m.status==='FINISHED');
-      let mp=0, ga=0, cs=0;
-      ms.forEach(m=>{
-        const sc = scoreOfMatch(m);
-        mp++;
-        const conceded = m.home===t.id? sc.a : sc.h;
-        ga += conceded;
-        if(conceded===0) cs++;
-      });
-      return {name:t.name, mp, ga, cs};
-    }).sort((a,b)=> a.ga-b.ga);
-    html += `<table class="standings"><tr><th style="text-align:left;">Tim</th><th>Main</th><th>Kebobolan</th><th>Clean Sheet</th></tr>
-      ${rows.map(r=>`<tr><td style="text-align:left;">${r.name}</td><td>${r.mp}</td><td>${r.ga}</td><td>${r.cs}</td></tr>`).join('')}
-      </table>`;
-    html += `</div><p class="hint">GK Terbaik tetap merupakan keputusan panitia berdasarkan data pendukung ini.</p>`;
-  }
+  if(tab==='scorer') html += `<div class="card">${topScorerListHtml()}</div>`;
+  else if(tab==='cards') html += cardsCardHtml().replace('<div class="section-title">Kartu</div>','');
+  else html += gkCardHtml().replace('<div class="section-title">Data GK</div>','');
   return html;
 }
 
@@ -1539,14 +1644,14 @@ function handleLogoFile(input){
   reader.onload = function(ev){
     const img = new Image();
     img.onload = function(){
-      const size = 200;
+      const size = 150;
       const canvas = document.createElement('canvas');
       canvas.width = size; canvas.height = size;
       const ctx = canvas.getContext('2d');
       const scale = Math.max(size/img.width, size/img.height);
       const w = img.width*scale, h = img.height*scale;
       ctx.drawImage(img, (size-w)/2, (size-h)/2, w, h);
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.72);
       window._pendingLogo = dataUrl;
       const prev = document.getElementById('tLogoPreview');
       if(prev) prev.src = dataUrl;
@@ -1739,7 +1844,19 @@ function closeModal(){ document.getElementById('modalRoot').innerHTML=''; }
 /* ---------- BOOT ---------- */
 (async function boot(){
   await loadThemePref();
-  await loadState();
+  const fbReady = await waitForFirebase(6000);
+  if(fbReady){
+    try{
+      await subscribeState();
+    }catch(e){
+      console.error(e);
+      STATE = buildDefaultState();
+      toast('⚠ Gagal terhubung ke server — perubahan tidak akan tersimpan');
+    }
+  } else {
+    STATE = buildDefaultState();
+    toast('⚠ Gagal terhubung ke server — perubahan tidak akan tersimpan');
+  }
   render();
 })();
 </script>
