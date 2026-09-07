@@ -383,6 +383,87 @@ const STORAGE_KEY = 'pccc_state_v2';
 let STATE = null;
 let ROUTE = 'dashboard';
 let SUBSTATE = {}; // transient per-view state (open match id, klasemen tab, etc)
+const PLAYER_IMPORT_DATA = {
+  rt01: { manager:'Haji Eron', players:[
+    {name:'Belum Jelas', position:'GK'},{name:'Toeng', position:'GK'},{name:'Ari', position:'GK'},{name:'Heru', position:'GK'},
+    {name:'Haji Dani', position:'DF'},{name:'Usup', position:'DF'},{name:'Babam', position:'DF'},{name:'Ive', position:'DF'},{name:'Ablay', position:'DF'},{name:'Abit', position:'DF'},{name:'Njang', position:'DF'},{name:'Mada', position:'DF'},{name:'Jana', position:'DF'},{name:'Hendra', position:'DF'},
+    {name:'Dase', position:'MF'},{name:'Opung', position:'MF'},{name:'Iskandar', position:'MF'},{name:'Anggi', position:'MF'},{name:'Bayu', position:'MF'},{name:'Epeng', position:'MF'},{name:'H. Econ', position:'MF'},{name:'D. Wildan', position:'MF'},{name:'Bagas', position:'MF'},{name:'Raya', position:'MF'},{name:'Alen', position:'MF'}
+  ]},
+  rt02: { manager:'Pak Ukat (RT)', players:[
+    {name:'Karyanto', position:'GK'},{name:'Yuda', position:'GK'},
+    {name:'Ari M', position:'DF'},{name:'Karyanto', position:'DF'},{name:'Alfani', position:'DF'},{name:'Leo', position:'DF'},{name:'Soni', position:'DF'},{name:'Irgi', position:'DF'},{name:'Ibnu', position:'DF'},{name:'Firdaus', position:'DF'},{name:'Endang', position:'DF'},
+    {name:'Wahyudin', position:'MF'},{name:'Dian', position:'MF'},{name:'Gilang', position:'MF'},{name:'Fahmi', position:'MF'},{name:'Andri', position:'MF'},{name:'Ruli', position:'MF'},{name:'Yuldan', position:'MF'},{name:'Benny', position:'MF'},{name:'M. Gozali', position:'MF'},{name:'Fadil', position:'MF'},{name:'Fahrul / Adlian', position:'MF'},{name:'Yoko', position:'MF'},{name:'Jayas', position:'MF'},{name:'Farid', position:'MF'}
+  ]},
+  rt03: { manager:'RT Bolu / Nur', players:[
+    {name:'Eful', position:'GK'},{name:'Bombom', position:'GK'},{name:'Nizam', position:'GK'},{name:'Rizky Kinong', position:'GK'},
+    {name:'Yoga', position:'DF'},{name:'Wandol', position:'DF'},{name:'A. Deden', position:'DF'},{name:'Aceng', position:'DF'},{name:'Adit', position:'DF'},{name:'Adang', position:'DF'},{name:'Ujeng', position:'DF'},{name:'Qistan', position:'DF'},{name:'Iwan', position:'DF'},{name:'Dimas', position:'DF'},{name:'Cepot Daus', position:'DF'},{name:'Rizky / Kentung', position:'DF'},
+    {name:'Amar', position:'MF'},{name:'Bambang', position:'MF'},{name:'Gilang', position:'MF'},{name:'Endang', position:'MF'},{name:'Dika', position:'MF'},{name:'Zoto', position:'MF'},
+    {name:'Rian Peang', position:'FW'},{name:'Fadillah', position:'FW'},{name:'Rizki Mocy', position:'FW'},{name:'Fajri', position:'FW'},{name:'Bados Agung', position:'FW'},{name:'Ucup Dengo', position:'FW'},{name:'Cepot Jabar', position:'FW'}
+  ]},
+  rt04: { manager:'RT Ajay', players:[
+    {name:'Ajang / Dayong', position:'GK'},{name:'Ende / Eman / Herman', position:'GK'},
+    {name:'Rana (Petet)', position:'DF'},{name:'Usman', position:'DF'},{name:'Ahmad Jaelani (Jokow)', position:'DF'},{name:'Azi', position:'DF'},{name:'Somantri', position:'DF'},{name:'Ferdian Muhammad', position:'DF'},{name:'Ferdi', position:'DF'},{name:'Erik', position:'DF'},{name:'Adim', position:'DF'},{name:'Yandi (Ayah)', position:'DF'},{name:'Yogi', position:'DF'},{name:'Dayu', position:'DF'},
+    {name:'Rian', position:'MF'},{name:'Ilham', position:'MF'},{name:'Galih', position:'MF'},{name:'Alex', position:'MF'},{name:'Imam', position:'MF'},{name:'Muslim', position:'MF'},{name:'Sunara', position:'MF'},{name:'Darma', position:'MF'},{name:'Karsum', position:'MF'},{name:'Katro', position:'MF'},
+    {name:'Andri', position:'FW'},{name:'Toing', position:'FW'},{name:'Azay', position:'FW'},{name:'Padi (Lotek)', position:'FW'},{name:'Udon', position:'FW'},{name:'Romy', position:'FW'}
+  ]},
+  rt05: { manager:'Bah Marta', players:[
+    {name:'Rafli', position:''},{name:'Debleng', position:''},{name:'Raka', position:''},{name:'Sarja', position:''},{name:'Dery', position:''},{name:'Arga', position:''},{name:'Ikbal', position:''},{name:'Ari', position:''},{name:'Eka', position:''},{name:'Idris', position:''},
+    {name:'Gudel / Yuda', position:'MF'},{name:'Ndun', position:'MF'},{name:'Faras', position:'MF'},{name:'Ajis', position:'MF'},{name:'Yoga', position:'MF'},{name:'Omen', position:'MF'},
+    {name:'Asep', position:'FW'},{name:'Iyang', position:'FW'},{name:'Happap', position:'FW'},{name:'Alam', position:'FW'},{name:"Ma'mun", position:'FW'},{name:'Kinoy', position:'FW'},{name:'Agis', position:'FW'}
+  ]},
+  rt06: { manager:'RT Pandi', players:[
+    {name:'Rifqi Muvidi Adha', position:'GK'},{name:'Sanang Mahrup', position:'GK'},
+    {name:'Mahmud Irfan', position:'DF'},{name:'Saeful Rohman', position:'DF'},{name:'Udan', position:'DF'},{name:'Hendra', position:'DF'},{name:'Ariep Hamdan', position:'DF'},{name:'Sopian Tsauri', position:'DF'},{name:'Ukar Mulyana', position:'DF'},{name:'M. Reza Sah Pahlevi', position:'DF'},{name:'Ondi', position:'DF'},{name:'Tio Karina', position:'DF'},{name:'Tatang', position:'DF'},{name:'Dede', position:'DF'},
+    {name:'Aditya Rizqy Pratama', position:'MF'},{name:'Mohamad Haris Fajar Sidiq', position:'MF'},{name:'Bisma Ditya Prakasa', position:'MF'},{name:'Mahirun', position:'MF'},{name:'Indra Permana', position:'MF'},{name:'Muhamad Raslim', position:'MF'},{name:'Muhammad Rafka Aditya', position:'MF'},{name:'Habbamy Arham', position:'MF'},{name:'Roby Febriyanto', position:'MF'},{name:'Abdurrohman', position:'MF'}
+  ]},
+  rt07: { manager:'RT Rosim', players:[
+    {name:'Candra Batak', position:'GK'},{name:'Kinoy', position:'GK'},
+    {name:'Dadan', position:'DF'},{name:'Fahmi', position:'DF'},{name:'Krisna', position:'DF'},{name:'Rey', position:'DF'},{name:'Sandi Inyong', position:'DF'},{name:'Sandi Kinoy', position:'DF'},{name:'Jajang', position:'DF'},
+    {name:'Baam', position:'MF'},{name:'Edi', position:'MF'},{name:'Nanang', position:'MF'},{name:'Embeh', position:'MF'},{name:'Ripal', position:'MF'},{name:'Dede Ebot', position:'MF'},{name:'Dandan', position:'MF'},
+    {name:'Ade Bedek', position:'FW'},{name:'Konde', position:'FW'},{name:'Wulandari', position:'FW'},{name:'Ahmad', position:'FW'},{name:'Iki', position:'FW'},{name:'Abay', position:'FW'},{name:'Sule Eman', position:'FW'},{name:'Fahri', position:'FW'},{name:'Komar Keling', position:'FW'}
+  ]},
+  rt08: { manager:'Nandang', players:[
+    {name:'Rudi', position:'GK'},{name:'Omat', position:'GK'},{name:'Angga', position:'GK'},
+    {name:'Ryan', position:'DF'},{name:'Asep', position:'DF'},{name:'Raka', position:'DF'},{name:'Arya', position:'DF'},{name:'Wasin', position:'DF'},{name:'Viki', position:'DF'},{name:'Wawan', position:'DF'},{name:'Rizki / Itiw', position:'DF'},{name:'Adit', position:'DF'},{name:'Narsim', position:'DF'},{name:'Ruswan', position:'DF'},{name:'Diar', position:'DF'},{name:'Dimas', position:'DF'},{name:'Angga H.', position:'DF'},{name:'Egi', position:'DF'},{name:'Eki', position:'DF'},{name:'Albis', position:'DF'},{name:'Dede / Deblo', position:'DF'},{name:'Sarip', position:'DF'},{name:'Akbar', position:'DF'},
+    {name:'Yogi', position:'MF'},{name:'Aceng', position:'MF'},{name:'Adit / Irung', position:'MF'},{name:'Wahidin', position:'MF'},{name:'Arman', position:'MF'},{name:'Rendy', position:'MF'},{name:'Reza', position:'MF'},{name:'Ilham', position:'MF'},{name:'Nubi', position:'MF'},{name:'Oman', position:'MF'}
+  ]},
+  rt09: { manager:'RT Damar', players:[
+    {name:'H. Cepot', position:'GK'},{name:'Supardi', position:'GK'},{name:'Ramli', position:'GK'},{name:'Sultan', position:'GK'},{name:'Sandi / Duple', position:'GK'},
+    {name:'Angga', position:'DF'},{name:'Firas', position:'DF'},{name:'Mardi', position:'DF'},{name:'Haris', position:'DF'},{name:'Acep', position:'DF'},{name:'Ahmad Husen / Mandailing', position:'DF'},{name:'Diki / Veron', position:'DF'},{name:'Ade C', position:'DF'},{name:'Usman', position:'DF'},{name:'Hendriyawan / Ede', position:'DF'},{name:'Pak Jaya', position:'DF'},{name:'Muh. Safei', position:'DF'},{name:'Saripudin', position:'DF'},
+    {name:'A. Iyan', position:'MF'},{name:'Asep Ito', position:'MF'},{name:'Rehan', position:'MF'},{name:'Eko', position:'MF'},{name:'Dadan', position:'MF'},{name:'Khalid', position:'MF'},{name:'Suji', position:'MF'},{name:'Surya / Utang', position:'MF'},{name:'Pudin', position:'MF'}
+  ]},
+  rt10: { manager:'Wanta Suryana', players:[
+    {name:'Diki Maulana', position:'GK'},{name:'Iki', position:'GK'},
+    {name:'Ajis', position:'DF'},{name:'Yakub', position:'DF'},{name:'Arimbi', position:'DF'},{name:'Dewa', position:'DF'},{name:'Galuh', position:'DF'},{name:'Lulus', position:'DF'},{name:'Kundang', position:'DF'},{name:'Irfan', position:'DF'},{name:'Rodiyana / Ahong', position:'DF'},{name:'Ahmad Fauzi / Toing', position:'DF'},{name:'Adim', position:'DF'},{name:'Sutrisna', position:'DF'},{name:'Pak Alo', position:'DF'},
+    {name:'Farma', position:'MF'},{name:'Ata', position:'MF'},{name:'Aidi', position:'MF'},{name:'Dede', position:'MF'},{name:'Reno', position:'MF'},{name:'Karyadi', position:'MF'},{name:'Rifal', position:'MF'},{name:'Andi Wahyudin', position:'MF'},{name:'Nana Narya / Arab', position:'MF'}
+  ]},
+  rt11: { manager:'A. Wardi', players:[
+    {name:'Ergi / Endang Supardi', position:'GK'},{name:'Rio', position:'GK'},
+    {name:'Karsam', position:'DF'},{name:'Bowo', position:'DF'},{name:'Iyan', position:'DF'},{name:'Tian', position:'DF'},{name:'Rudi', position:'DF'},{name:'Tio', position:'DF'},{name:'Sarim', position:'DF'},{name:'Dani', position:'DF'},{name:'Ompong', position:'DF'},{name:'Aldi', position:'DF'},{name:'Aris', position:'DF'},{name:'Arta', position:'DF'},{name:'Boyke', position:'DF'},{name:'Lili', position:'DF'},{name:'Andri', position:'DF'},{name:'Sana', position:'DF'},{name:'Nana', position:'DF'},{name:'Dai', position:'DF'},{name:'Kuclek', position:'DF'},{name:'Tarman / Medo', position:'DF'},
+    {name:'Edoy', position:'MF'},{name:'Upung', position:'MF'},{name:'Oni', position:'MF'},{name:'Bayu', position:'MF'},{name:'Wahid', position:'MF'},{name:'Raka', position:'MF'},{name:'Isam', position:'MF'},{name:'Hermawan', position:'MF'},{name:'Ato', position:'MF'},{name:'Riski', position:'MF'}
+  ]},
+  rt12: { manager:'RT Hadi', players:[
+    {name:'Heru', position:'GK'},
+    {name:'Dedi M', position:'DF'},{name:'Aling', position:'DF'},{name:'Dodang', position:'DF'},{name:'Candra', position:'DF'},{name:'Iyan', position:'DF'},{name:'Tarji', position:'DF'},{name:'Raldo', position:'DF'},{name:'Ekung', position:'DF'},{name:'Dapid', position:'DF'},
+    {name:'Dayat', position:'MF'},{name:'Pudin', position:'MF'},{name:'Jalal', position:'MF'},{name:'Apis', position:'MF'},{name:'Adul', position:'MF'},{name:'Aji', position:'MF'},{name:'Ajis Yamal', position:'MF'},{name:'Rosadi', position:'MF'},{name:'Jimy', position:'MF'},{name:'Gudel', position:'MF'},{name:'Baron', position:'MF'},{name:'Suryana', position:'MF'}
+  ]},
+  rt13: { manager:'Parman', players:[
+    {name:'Wawan Hermawan', position:'GK'},{name:'Rendi', position:'GK'},{name:'Saeful Akbar', position:'GK'},
+    {name:'Darsim Nurjaya', position:'DF'},{name:'Muhammad Abdul Ajid', position:'DF'},{name:'Wasna Sujana', position:'DF'},{name:'Saepul Anwar', position:'DF'},{name:'Sopiyan Nugraha', position:'DF'},{name:'Ahmad Jarkoni', position:'DF'},{name:'Dadang Kurniadi', position:'DF'},{name:'Wayim', position:'DF'},
+    {name:'Cecep Suhendar', position:'MF'},{name:'Tata Cahyadi', position:'MF'},{name:'Atim', position:'MF'},{name:'Johan Permana', position:'MF'},{name:'Ajat Sudrajat', position:'MF'},{name:'M. Abdul Arifin', position:'MF'},{name:'Sandi Andika', position:'MF'},{name:'Encim', position:'MF'},{name:'Abdul Karim', position:'MF'},{name:'Reyhan Rifano', position:'MF'},{name:'Putra Aditya', position:'MF'},{name:'Afian Sugara', position:'MF'},{name:'Alfa Riyadi', position:'MF'},{name:'Muhammad Teja', position:'MF'}
+  ]},
+  rt14: { manager:'RT Idi', players:[
+    {name:'Sobleng / Solehudin', position:'GK'},
+    {name:'Mahmud', position:'DF'},{name:'Wawan Purnama', position:'DF'},{name:'Dian', position:'DF'},{name:'Armansyah', position:'DF'},{name:'Opik', position:'DF'},{name:'Isep', position:'DF'},{name:'Wawan Gunawan', position:'DF'},{name:'Ade', position:'DF'},{name:'Rehan', position:'DF'},{name:'Mista Junaedi', position:'DF'},
+    {name:'Ripal Barid', position:'MF'},{name:'Sanjaya P', position:'MF'},{name:'Abdul Aji', position:'MF'},{name:'M. Dian Aditya', position:'MF'},{name:'Dramas Ariandi', position:'MF'},{name:'Khalil A. Azis', position:'MF'},{name:'Warna', position:'MF'},{name:'Sarim', position:'MF'},{name:'Muhtar Siregar', position:'MF'}
+  ]},
+  rt15: { manager:'Nana Kontet', players:[
+    {name:'Adul', position:'GK'},{name:'Pa Otek', position:'GK'},
+    {name:'Jambul / Fahmi', position:'DF'},{name:'Sahrul', position:'DF'},{name:'Karwan', position:'DF'},{name:'Wildan', position:'DF'},{name:'Ebdalah', position:'DF'},{name:'Arbi', position:'DF'},{name:'Brajil', position:'DF'},{name:'Hasril', position:'DF'},{name:'Azis K', position:'DF'},{name:'Azis 2', position:'DF'},{name:'Mulyadi', position:'DF'},
+    {name:'Tedi', position:'MF'},{name:'Tatang', position:'MF'},{name:'Permana', position:'MF'},{name:'Dimas', position:'MF'},{name:'Apip', position:'MF'},{name:'Dede Eman', position:'MF'},{name:'Opik', position:'MF'},{name:'Rogi', position:'MF'},{name:'Devid', position:'MF'},{name:'Dindin', position:'MF'},{name:'Tata', position:'MF'},{name:'Husen', position:'MF'}
+  ]}
+};
+
 let IS_ADMIN = false; // session-only, not persisted
 let THEME = 'dark'; // personal, persisted per-device (not shared)
 
@@ -657,7 +738,8 @@ function svgIcon(name){
     lock:'<rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>',
     login:'<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/>',
     sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>',
-    moon:'<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>'
+    moon:'<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>',
+    doc:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/>'
   };
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${icons[name]||''}</svg>`;
 }
@@ -668,9 +750,16 @@ function isGroupComplete(g){
 }
 function allGroupsComplete(){ return ['A','B','C'].every(isGroupComplete); }
 
+function fairPlayCost(y,r){
+  if(r>=1 && y>=1) return -5;   // Kuning + Merah Langsung
+  if(r>=1 && y===0) return -4;  // Merah Langsung
+  if(y>=2) return -3;           // Merah (2 Kuning)
+  if(y===1) return -1;          // Kuning
+  return 0;
+}
 function computeGroupTable(g){
   const teams = STATE.teams.filter(t=>t.group===g);
-  const table = teams.map(t=>({id:t.id,name:t.name,rt:t.rt,mp:0,w:0,d:0,l:0,gf:0,ga:0,gd:0,pts:0,yellow:0,red:0}));
+  const table = teams.map(t=>({id:t.id,name:t.name,rt:t.rt,mp:0,w:0,d:0,l:0,gf:0,ga:0,gd:0,pts:0,yellow:0,red:0,fairPlayPts:0}));
   const byId = Object.fromEntries(table.map(t=>[t.id,t]));
   const gMatches = STATE.matches.filter(m=>m.group===g && m.stage==='GROUP' && m.status==='FINISHED');
   gMatches.forEach(m=>{
@@ -685,12 +774,23 @@ function computeGroupTable(g){
     else {h.d++;a.d++;h.pts+=1;a.pts+=1;}
   });
   table.forEach(t=>t.gd = t.gf - t.ga);
+
+  // Fair Play: cost is computed per player per match (2 yellows = one -3
+  // outcome, not two separate -1s), per the Season 2 card-point table.
+  const cardTally = {}; // key: matchId|playerId -> {teamId,y,r}
   STATE.events.forEach(e=>{
+    if(e.type!=='YELLOW_CARD' && e.type!=='RED_CARD') return;
     const m = matchById(e.matchId);
     if(!m || m.status!=='FINISHED' || m.group!==g || m.stage!=='GROUP') return;
     const t = byId[e.teamId]; if(!t) return;
-    if(e.type==='YELLOW_CARD') t.yellow++;
-    if(e.type==='RED_CARD') t.red++;
+    if(e.type==='YELLOW_CARD') t.yellow++; else t.red++;
+    const key = e.matchId+'|'+e.playerId;
+    cardTally[key] = cardTally[key] || {teamId:e.teamId, y:0, r:0};
+    if(e.type==='YELLOW_CARD') cardTally[key].y++; else cardTally[key].r++;
+  });
+  Object.values(cardTally).forEach(pc=>{
+    const t = byId[pc.teamId]; if(!t) return;
+    t.fairPlayPts += fairPlayCost(pc.y, pc.r);
   });
 
   const override = STATE.settings.manualOverride[g];
@@ -704,8 +804,7 @@ function computeGroupTable(g){
 function compareTeams(a,b,matches){
   if(b.pts!==a.pts) return b.pts-a.pts;
   if(b.gd!==a.gd) return b.gd-a.gd;
-  const aFair = a.yellow + a.red*2, bFair = b.yellow + b.red*2;
-  if(aFair!==bFair) return aFair-bFair;
+  if((b.fairPlayPts||0)!==(a.fairPlayPts||0)) return (b.fairPlayPts||0)-(a.fairPlayPts||0);
   const h2h = (matches||STATE.matches).find(m=>m.status==='FINISHED' && ((m.home===a.id&&m.away===b.id)||(m.home===b.id&&m.away===a.id)));
   if(h2h){
     const sc = scoreOfMatch(h2h);
@@ -715,6 +814,7 @@ function compareTeams(a,b,matches){
   }
   return a.name.localeCompare(b.name);
 }
+
 function bestThirdTable(){
   const thirds = ['A','B','C'].map(g=>{
     const t = computeGroupTable(g);
@@ -798,6 +898,7 @@ function render(){
     klasemen: renderKlasemen,
     statistik: renderStatistik,
     teamdetail: renderTeamDetail,
+    regulasi: renderRegulasi,
     'admin-teams': renderAdminTeams,
     'admin-players': renderAdminPlayers,
     'admin-settings': renderAdminSettings
@@ -856,6 +957,7 @@ function renderSidebarNav(){
     const active = ROUTE===r || (r==='pertandingan' && ROUTE==='matchdetail');
     return `<div class="sidenav-item ${active?'active':''}" onclick="go('${r}')">${svgIcon(icon)}<span>${label}</span></div>`;
   }).join('');
+  html += `<div class="sidenav-item ${ROUTE==='regulasi'?'active':''}" onclick="go('regulasi')">${svgIcon('doc')}<span>Regulasi Resmi</span></div>`;
 
   if(IS_ADMIN){
     html += `<div class="sidenav-divider"></div><div class="sidenav-label">PANITIA</div>`;
@@ -881,6 +983,22 @@ function openingCeremonyBannerHtml(){
     <div style="font-size:11px;color:var(--gold-400);font-weight:700;letter-spacing:0.04em;">🏆 OPENING CEREMONY</div>
     <div class="display" style="font-size:21px;margin:4px 0;">${fmtDate(date)}</div>
     <div class="muted" style="font-size:12px;">${openers.map(m=>teamName(m.home)+' vs '+teamName(m.away)+' · '+m.time).join(' &nbsp;|&nbsp; ')}</div>
+  </div>`;
+}
+function prizeBannerHtml(){
+  return `<div class="card" style="border-color:var(--gold-500);padding:16px 14px;">
+    <div style="text-align:center;">
+      <div class="muted" style="font-size:10.5px;font-weight:700;letter-spacing:0.05em;">TOTAL HADIAH</div>
+      <div class="display" style="font-size:25px;color:var(--gold-400);margin:2px 0;">Rp7.700.000</div>
+      <div class="muted" style="font-size:11px;">+ Piala &amp; Medali</div>
+    </div>
+    <div class="kpi-row" style="margin-top:12px;">
+      <div class="kpi"><div class="num" style="font-size:14px;">Rp3jt</div><div class="lbl">Juara 1</div></div>
+      <div class="kpi"><div class="num" style="font-size:14px;">Rp2jt</div><div class="lbl">Juara 2</div></div>
+      <div class="kpi"><div class="num" style="font-size:14px;">Rp1jt</div><div class="lbl">Juara 3</div></div>
+      <div class="kpi"><div class="num" style="font-size:14px;">350rb</div><div class="lbl">Top Skor</div></div>
+    </div>
+    <div class="hint" style="margin:10px 2px 0 2px;">+ GK Terbaik Rp350.000 &middot; Hadiah Carnaval Supporter Opening: Terbaik 1 Rp500rb, Terbaik 2 Rp300rb, Icon Supporter Rp200rb</div>
   </div>`;
 }
 function renderDashboard(){
@@ -918,6 +1036,7 @@ function renderDashboard(){
 
   return `
     ${openingCeremonyBannerHtml()}
+    ${prizeBannerHtml()}
     <div class="kpi-row">
       <div class="kpi"><div class="num">${total}</div><div class="lbl">Match</div></div>
       <div class="kpi"><div class="num">${finished}</div><div class="lbl">Selesai</div></div>
@@ -1284,6 +1403,78 @@ function renderTeamDetail(){
   return html;
 }
 function history_backToKlasemen(g){ go('klasemen',{kTab:g}); }
+
+/* ---------- REGULASI RESMI (public) ---------- */
+function renderRegulasi(){
+  let html = `<div class="card" style="text-align:center;padding:18px 14px;border-color:var(--gold-500);">
+    <div class="muted" style="font-size:10.5px;font-weight:700;letter-spacing:0.05em;">DOKUMEN ACUAN RESMI PANITIA</div>
+    <h2 style="margin:6px 0 2px 0;">Regulasi Resmi</h2>
+    <div style="color:var(--gold-400);font-weight:700;font-size:13px;">PURNAMA CILEWO CUP — SEASON 2</div>
+    <div class="muted" style="font-size:11.5px;margin-top:4px;">September – November 2026 · Lapangan Desa Cilewo</div>
+    <div style="margin-top:8px;font-size:11px;color:var(--ink-dim);">FAIR PLAY • SPORTIF • KEBERSAMAAN<br>"Kita Bersaudara, Kita Juara!"</div>
+  </div>`;
+
+  html += `<div class="section-title">BAB I — Kepesertaan &amp; Syarat Pemain</div><div class="card">
+    <p style="margin:0 0 8px 0;">Turnamen diikuti <b>15 Tim RT</b> se-Desa Cilewo. Setiap tim wajib mengikuti seluruh rangkaian pertandingan sesuai jadwal resmi panitia.</p>
+    <p style="margin:0 0 6px 0;"><b>Pemain KTP Asli Cilewo</b> — wajib berdomisili di Cilewo, dibuktikan KTP asli berlaku, ditunjukkan saat registrasi &amp; verifikasi.</p>
+    <p style="margin:0 0 6px 0;"><b>Pemain Luar Cilewo (ketentuan khusus)</b> — warga luar Cilewo yang menikah dengan warga asli Cilewo dan menetap di Cilewo; atau warga asli Cilewo yang menikah dan tinggal di luar Cilewo namun masih memiliki ikatan keluarga di Cilewo.</p>
+    <p style="margin:0 0 6px 0;">Pemain kategori khusus wajib discreening panitia. Pemain sah diberi <b>Stempel Purnama</b>. Tanpa stempel = <b>tidak sah</b>, dilarang bermain.</p>
+    <div class="hint" style="margin:8px 0 0 0;">⚠ Tim terbukti memakai pemain tidak sah dapat didiskualifikasi/WO sesuai keputusan panitia.</div>
+  </div>`;
+
+  html += `<div class="section-title">BAB II — Sistem &amp; Mekanisme Pertandingan</div><div class="card">
+    <p style="margin:0 0 6px 0;"><b>Alur:</b> Fase Grup → Perempat Final → Semifinal → Final</p>
+    <p style="margin:0 0 8px 0;">15 tim dibagi 3 grup (A/B/C) berisi 5 tim, round robin — tiap tim main 4 kali, total 30 pertandingan grup.</p>
+    <table class="standings" style="margin-bottom:8px;"><tr><th style="text-align:left;">Hasil</th><th>Poin</th></tr>
+      <tr><td style="text-align:left;">Menang</td><td>3</td></tr>
+      <tr><td style="text-align:left;">Seri</td><td>1</td></tr>
+      <tr><td style="text-align:left;">Kalah</td><td>0</td></tr>
+    </table>
+    <p style="margin:0 0 4px 0;"><b>Urutan tie-break klasemen:</b> 1) Poin 2) Selisih Gol 3) Fair Play/Poin Kartu 4) Head-to-Head. Jumlah gol dicetak bukan faktor penilaian. Jika masih sama seluruhnya → undian terbuka disaksikan tim terkait.</p>
+    <table class="standings" style="margin-top:8px;"><tr><th style="text-align:left;">Kartu</th><th>Poin FP</th></tr>
+      <tr><td style="text-align:left;">Kuning</td><td>-1</td></tr>
+      <tr><td style="text-align:left;">Merah (2 Kuning)</td><td>-3</td></tr>
+      <tr><td style="text-align:left;">Merah Langsung</td><td>-4</td></tr>
+      <tr><td style="text-align:left;">Kuning + Merah Langsung</td><td>-5</td></tr>
+    </table>
+    <div class="hint" style="margin:8px 0 0 0;">Poin Fair Play lebih tinggi (mendekati 0) = peringkat lebih atas.</div>
+  </div>`;
+
+  html += `<div class="card">
+    <p style="margin:0 0 6px 0;"><b>Lolos ke 8 Besar:</b> Juara Grup A/B/C (3) + Runner-up A/B/C (3) + 2 peringkat-3 terbaik = 8 tim.</p>
+    <p style="margin:0 0 6px 0;"><b>Seed 8 Besar</b> — S1–S3: Juara Grup terbaik · S4–S6: Runner-up terbaik · S7–S8: Peringkat 3 terbaik. Diurutkan Poin → Selisih Gol → Fair Play → undian terbuka.</p>
+    <table class="standings"><tr><th style="text-align:left;">QF</th><th>Pertandingan</th></tr>
+      <tr><td style="text-align:left;">QF 1</td><td>Seed 1 vs Seed 8</td></tr>
+      <tr><td style="text-align:left;">QF 2</td><td>Seed 4 vs Seed 5</td></tr>
+      <tr><td style="text-align:left;">QF 3</td><td>Seed 2 vs Seed 7</td></tr>
+      <tr><td style="text-align:left;">QF 4</td><td>Seed 3 vs Seed 6</td></tr>
+    </table>
+    <div class="hint" style="margin:8px 0 0 0;">Tim satu grup diupayakan tidak bertemu lagi di QF — kalau terjadi, lawan ditukar dengan seed terdekat setingkat, tanpa mengubah status peringkat.</div>
+    <p style="margin:10px 0 0 0;">Semifinal &amp; Final tidak ada lagi batasan asal grup. <b>Jika seri di babak gugur</b> (QF/SF/Final): langsung adu penalti, <b>tanpa perpanjangan waktu</b>.</p>
+  </div>`;
+
+  html += `<div class="section-title">BAB III — Regulasi Pertandingan</div><div class="card">
+    <p style="margin:0 0 6px 0;">Registrasi pemain maksimal <b>15 menit sebelum kick off</b>. Pemain belum registrasi dilarang bermain.</p>
+    <p style="margin:0 0 6px 0;">Keterlambatan tim lebih dari <b>10 menit</b> dari kick off dinyatakan gugur/WO.</p>
+    <p style="margin:0;">Keputusan wasit bersifat final untuk hal teknis pertandingan dan wajib dihormati seluruh peserta.</p>
+  </div>`;
+
+  html += `<div class="section-title">BAB IV — Disiplin, Kartu &amp; Sanksi</div><div class="card">
+    <p style="margin:0 0 8px 0;">Setiap tim wajib memberi <b>deposit disiplin Rp30.000</b>, dipotong sesuai kartu yang diberikan wasit.</p>
+    <table class="standings" style="margin-bottom:8px;"><tr><th style="text-align:left;">Kartu</th><th>Potongan</th></tr>
+      <tr><td style="text-align:left;">Kuning</td><td>Rp10.000</td></tr>
+      <tr><td style="text-align:left;">Merah</td><td>Rp20.000</td></tr>
+    </table>
+    <p style="margin:0 0 6px 0;"><b>Sanksi pemain:</b> 2 kartu kuning berturut-turut atau kartu merah → tidak boleh main 1 pertandingan berikutnya. Akumulasi kartu fase grup di-reset saat masuk Perempat Final.</p>
+    <p style="margin:0;"><b>Sanksi tim (WO):</b> mengundurkan diri/tidak hadir/menolak lanjut → kalah WO + ganti rugi <b>Rp500.000</b>.</p>
+  </div>`;
+
+  html += `<div class="section-title">BAB V — Kewenangan Panitia &amp; Penutup</div><div class="card">
+    <p style="margin:0;">Seluruh peserta wajib menjunjung sportivitas, solidaritas, dan silaturahmi antar RT. Hal-hal yang belum diatur dalam regulasi ini diputuskan oleh panitia — keputusan panitia dan wasit bersifat final sesuai kewenangan masing-masing.</p>
+  </div>`;
+
+  return html;
+}
 
 
 function groupStandingsCardHtml(g){
@@ -1739,6 +1930,40 @@ async function deactivatePlayer(playerId){
 }
 
 /* ---------- ADMIN: SETTINGS ---------- */
+function openBulkImportModal(){
+  let toAddCount = 0, alreadyCount = 0;
+  Object.keys(PLAYER_IMPORT_DATA).forEach(teamId=>{
+    const data = PLAYER_IMPORT_DATA[teamId];
+    data.players.forEach(p=>{
+      const exists = STATE.players.some(x=>x.teamId===teamId && x.name===p.name && x.position===(p.position||''));
+      if(exists) alreadyCount++; else toAddCount++;
+    });
+  });
+  showModal(`
+    <div class="sheet-head"><h3>Impor Data Pemain &amp; Koordinator</h3><button class="closeX" onclick="closeModal()">✕</button></div>
+    <p class="muted">Akan menambahkan <b>${toAddCount} pemain baru</b> dari rekap RT 01–15 (${alreadyCount} lainnya sudah ada, tidak akan dobel). Nama koordinator (ambil urutan pertama bila lebih dari satu) akan diisi ke data tim jika kolom itu masih kosong. Nomor punggung dikosongkan karena tidak ada jersey khusus — bisa diedit manual kapan saja lewat Kelola Tim / Kelola Pemain.</p>
+    <button class="btn btn-gold btn-block" onclick="runBulkImport()">Impor Sekarang</button>
+  `);
+}
+async function runBulkImport(){
+  await mutate(s=>{
+    Object.keys(PLAYER_IMPORT_DATA).forEach(teamId=>{
+      const data = PLAYER_IMPORT_DATA[teamId];
+      const team = s.teams.find(t=>t.id===teamId);
+      if(team && !team.manager) team.manager = data.manager;
+      data.players.forEach(p=>{
+        const exists = s.players.some(x=>x.teamId===teamId && x.name===p.name && x.position===(p.position||''));
+        if(!exists){
+          s.players.push({id:uid('p'), teamId, name:p.name, number:'', position:p.position||'', active:true});
+        }
+      });
+    });
+  });
+  closeModal();
+  toast('Data pemain & koordinator berhasil diimpor');
+  go('admin-players');
+}
+
 function renderAdminSettings(){
   if(!requireAdmin()) return adminLoginPrompt();
   return `
@@ -1746,6 +1971,11 @@ function renderAdminSettings(){
     <div class="card">
       <label>Nama Turnamen</label><input id="setName" value="${STATE.settings.tournamentName}">
       <button class="btn btn-outline btn-sm" onclick="saveTournamentName()">Simpan Nama</button>
+    </div>
+    <div class="card">
+      <label>Impor Data Pemain &amp; Koordinator</label>
+      <p class="hint">Isi otomatis roster 15 RT dari rekap resmi panitia. Aman diklik ulang — tidak akan menduplikasi data yang sudah ada.</p>
+      <button class="btn btn-outline btn-sm" onclick="openBulkImportModal()">Impor Data Pemain (RT 01–15)</button>
     </div>
     <div class="card">
       <label>Ubah PIN Admin</label><input id="setPin" placeholder="PIN baru">
@@ -1822,6 +2052,7 @@ function openMenu(){
   showModal(`
     <div class="sheet-head"><h3>Menu</h3><button class="closeX" onclick="closeModal()">✕</button></div>
     <div class="drawer-menu-item" onclick="toggleTheme();openMenu();">${svgIcon(THEME==='light'?'moon':'sun')} ${THEME==='light' ? 'Ganti ke Mode Gelap' : 'Ganti ke Mode Terang'}</div>
+    <div class="drawer-menu-item" onclick="closeModal();go('regulasi')">${svgIcon('doc')} Regulasi Resmi</div>
     ${IS_ADMIN ? `
       <div class="drawer-menu-item" onclick="closeModal();go('admin-teams')">${svgIcon('users')} Kelola Tim</div>
       <div class="drawer-menu-item" onclick="closeModal();go('admin-players')">${svgIcon('player')} Kelola Pemain</div>
