@@ -511,7 +511,7 @@ const MATCH_RESULTS_IMPORT = [
   { teamA:'rt02', teamB:'rt09',
     goals:[
       {team:'rt02', name:'Karyanto'},
-      {team:'rt09', name:'(OG) Gol Bunuh Diri'}
+      {team:'rt09', name:'(OG) Gol Bunuh Diri', ownGoal:true}
     ],
     cards:[
       {team:'rt02', name:'Gilang', type:'YELLOW_CARD'},
@@ -1215,9 +1215,11 @@ function miniStandingsHtml(g){
 }
 function topScorerListHtml(limit){
   const goals = {};
-  STATE.events.filter(e=>e.type==='GOAL').forEach(e=>{
+  STATE.events.filter(e=>e.type==='GOAL' && !e.ownGoal).forEach(e=>{
     const m = matchById(e.matchId);
     if(!m || m.status!=='FINISHED') return;
+    const p = STATE.players.find(pp=>pp.id===e.playerId);
+    if(p && p.name.trim().toLowerCase().startsWith('(og)')) return; // safety net for already-imported own-goal placeholders
     goals[e.playerId] = (goals[e.playerId]||0)+1;
   });
   const rows = Object.entries(goals).sort((a,b)=>b[1]-a[1]).slice(0,limit||100);
@@ -2168,7 +2170,9 @@ async function runBulkImportResults(){
       const beforeCount = s.players.length;
       r.goals.forEach(g=>{
         const playerId = findOrCreatePlayer(s, g.team, g.name);
-        s.events.push({id:uid('e'), matchId:m.id, teamId:g.team, playerId, type:'GOAL'});
+        const evt = {id:uid('e'), matchId:m.id, teamId:g.team, playerId, type:'GOAL'};
+        if(g.ownGoal) evt.ownGoal = true;
+        s.events.push(evt);
       });
       r.cards.forEach(c=>{
         const playerId = findOrCreatePlayer(s, c.team, c.name);
@@ -2219,6 +2223,21 @@ async function runBulkImport(){
 
 function renderAdminSettings(){
   if(!requireAdmin()) return adminLoginPrompt();
+  const pendingPlayers = (function(){
+    let count=0;
+    Object.keys(PLAYER_IMPORT_DATA).forEach(teamId=>{
+      PLAYER_IMPORT_DATA[teamId].players.forEach(p=>{
+        const exists = STATE.players.some(x=>x.teamId===teamId && x.name===p.name && x.position===(p.position||''));
+        if(!exists) count++;
+      });
+    });
+    return count;
+  })();
+  const pendingResults = MATCH_RESULTS_IMPORT.filter(r=>{
+    const m = STATE.matches.find(mm=> mm.stage==='GROUP' &&
+      ((mm.home===r.teamA && mm.away===r.teamB) || (mm.home===r.teamB && mm.away===r.teamA)));
+    return m && m.status!=='FINISHED';
+  }).length;
   return `
     <div class="section-title">Pengaturan Turnamen</div>
     <div class="card">
@@ -2228,12 +2247,16 @@ function renderAdminSettings(){
     <div class="card">
       <label>Impor Data Pemain &amp; Koordinator</label>
       <p class="hint">Isi otomatis roster 15 RT dari rekap resmi panitia. Aman diklik ulang — tidak akan menduplikasi data yang sudah ada.</p>
-      <button class="btn btn-outline btn-sm" onclick="openBulkImportModal()">Impor Data Pemain (RT 01–15)</button>
+      ${pendingPlayers>0
+        ? `<button class="btn btn-outline btn-sm" onclick="openBulkImportModal()">Impor Data Pemain (RT 01–15)</button>`
+        : `<div class="pill done" style="display:inline-flex;">✓ Semua pemain sudah diimpor</div>`}
     </div>
     <div class="card">
       <label>Impor Hasil Pertandingan</label>
-      <p class="hint">Isi otomatis skor, pencetak gol, dan kartu untuk 10 pertandingan Pekan 1–3 yang sudah dikonfirmasi panitia — sekali klik, tidak perlu input satu-satu. Aman diklik ulang, pertandingan yang sudah Selesai dilewati otomatis.</p>
-      <button class="btn btn-gold btn-sm" onclick="openBulkImportResultsModal()">⚽ Impor Hasil Pertandingan (10 Laga)</button>
+      <p class="hint">Isi otomatis skor, pencetak gol, dan kartu untuk 10 pertandingan Pekan 1–3 yang sudah dikonfirmasi panitia — sekali klik, tidak perlu input satu-satu.</p>
+      ${pendingResults>0
+        ? `<button class="btn btn-gold btn-sm" onclick="openBulkImportResultsModal()">⚽ Impor Hasil Pertandingan (${pendingResults} Laga)</button>`
+        : `<div class="pill done" style="display:inline-flex;">✓ Semua 10 hasil pertandingan sudah diimpor</div>`}
     </div>
     <div class="card">
       <label>Cadangan Data (Backup)</label>
