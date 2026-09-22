@@ -1943,20 +1943,29 @@ function skorsCardHtml(){
   const active = list.filter(x=>!x.served);
   const served = list.filter(x=>x.served);
   let html = `<div class="section-title">Status Skors Pemain</div><div class="card">`;
-  if(!active.length){
-    html += `<div class="empty-state">Tidak ada pemain yang sedang terkena skors.</div>`;
+  if(!active.length && !served.length){
+    html += `<div class="empty-state">Tidak ada pemain yang sedang atau pernah terkena skors.</div>`;
   } else {
-    html += active.map(x=>{
-      const lawan = x.nextMatch ? teamName(x.nextMatch.home===x.teamId ? x.nextMatch.away : x.nextMatch.home) : null;
-      return `<div class="match-row" style="cursor:default;">
-        <div class="teams"><div class="tname">🚫 ${x.name}</div><div class="vs">${x.teamNm} — dilarang main${lawan?' lawan '+lawan:' di laga berikutnya'}</div></div>
-      </div>`;
-    }).join('');
+    if(!active.length){
+      html += `<div class="empty-state">Tidak ada pemain yang sedang terkena skors.</div>`;
+    } else {
+      html += active.map(x=>{
+        const lawan = x.nextMatch ? teamName(x.nextMatch.home===x.teamId ? x.nextMatch.away : x.nextMatch.home) : null;
+        return `<div class="match-row" style="cursor:default;">
+          <div class="teams"><div class="tname">🚫 ${x.name}</div><div class="vs">${x.teamNm} — dilarang main${lawan?' lawan '+lawan:' di laga berikutnya'}</div></div>
+        </div>`;
+      }).join('');
+    }
+    if(served.length){
+      html += served.map(x=>{
+        const lawan = x.nextMatch ? teamName(x.nextMatch.home===x.teamId ? x.nextMatch.away : x.nextMatch.home) : null;
+        return `<div class="match-row" style="cursor:default;">
+          <div class="teams"><div class="tname">✅ ${x.name}</div><div class="vs">${x.teamNm} — sudah menjalani skors, boleh main lagi${lawan?' (lawan '+lawan+')':''}</div></div>
+        </div>`;
+      }).join('');
+    }
   }
   html += `</div>`;
-  if(served.length){
-    html += `<p class="hint" style="margin:6px 2px 0 2px;">Sudah menjalani skors (boleh main lagi): ${served.map(x=>x.name+' ('+x.teamNm+')').join(', ')}</p>`;
-  }
   return html;
 }
 function renderStatistik(){
