@@ -647,6 +647,8 @@ function generateGroupSchedule(teams, startDateStr){
 }
 
 /* ---------- persistence (Firebase Firestore) ---------- */
+let SYNCED = false; // true only once we've confirmed a real Firestore sync
+
 function waitForFirebase(timeoutMs){
   return new Promise((resolve)=>{
     if(window.__fb){ resolve(true); return; }
@@ -663,21 +665,38 @@ function subscribeState(){
       try{
         if(snap.exists() && snap.data().json){
           STATE = JSON.parse(snap.data().json);
+          SYNCED = true;
         } else if(firstLoad){
           STATE = buildDefaultState();
           await setDoc(stateDocRef, { json: JSON.stringify(STATE), updatedAt: Date.now() });
+          SYNCED = true;
         }
       }catch(e){
         console.error('Gagal membaca data', e);
-        if(firstLoad) STATE = buildDefaultState();
+        if(firstLoad && !STATE) STATE = buildDefaultState();
       }
       if(firstLoad){ firstLoad = false; resolve(); }
       else { render(); } // real-time update pushed from another device
     }, (err)=>{
       console.error('Firestore error', err);
-      if(firstLoad){ STATE = buildDefaultState(); firstLoad = false; resolve(); }
+      if(firstLoad){
+        // Could not confirm real data — show a local placeholder only.
+        // SYNCED stays false so nothing gets written over the real doc.
+        STATE = buildDefaultState();
+        firstLoad = false;
+        resolve();
+      }
     });
   });
+}
+async function retryConnect(){
+  toast('Mencoba menyambung ulang…');
+  const fbReady = await waitForFirebase(15000);
+  if(fbReady && !SYNCED){
+    try{ await subscribeState(); }catch(e){ console.error(e); }
+  }
+  render();
+  if(SYNCED) toast('✓ Tersambung ke server');
 }
 async function saveState(){
   try{
@@ -689,6 +708,11 @@ async function saveState(){
   }
 }
 async function mutate(fn){
+  if(!SYNCED){
+    toast('⚠ Belum tersambung ke server — jangan input dulu, coba "Muat Ulang" di atas');
+    render();
+    return;
+  }
   fn(STATE);
   await saveState();
   render();
@@ -751,9 +775,9 @@ function isGroupComplete(g){
 function allGroupsComplete(){ return ['A','B','C'].every(isGroupComplete); }
 
 function fairPlayCost(y,r){
-  if(r>=1 && y>=1) return -5;   // Kuning + Merah Langsung
+  if(y>=2) return -3;           // Merah (2 Kuning) — sending-off via accumulation, takes priority
+  if(r>=1 && y===1) return -5;  // Kuning + Merah Langsung (insiden terpisah)
   if(r>=1 && y===0) return -4;  // Merah Langsung
-  if(y>=2) return -3;           // Merah (2 Kuning)
   if(y===1) return -1;          // Kuning
   return 0;
 }
@@ -890,7 +914,7 @@ function render(){
   document.getElementById('bottomnav').innerHTML = renderBottomNav();
   document.getElementById('sidebarnav').innerHTML = renderSidebarNav();
   const content = document.getElementById('content');
-  content.innerHTML = ({
+  const routeHtml = ({
     dashboard: renderDashboard,
     jadwal: renderJadwal,
     pertandingan: renderPertandingan,
@@ -903,6 +927,12 @@ function render(){
     'admin-players': renderAdminPlayers,
     'admin-settings': renderAdminSettings
   }[ROUTE] || renderDashboard)();
+  const syncBanner = SYNCED ? '' : `<div class="card" style="border-color:var(--red-500);text-align:center;padding:14px;">
+    <div style="font-weight:700;color:var(--pill-live-fg);margin-bottom:4px;">⚠ Belum tersambung ke server</div>
+    <div class="muted" style="font-size:12px;margin-bottom:10px;">Data yang tampil mungkin belum yang terbaru, dan input baru <b>tidak akan tersimpan</b> sampai tersambung. Cek koneksi internet lalu coba lagi.</div>
+    <button class="btn btn-gold btn-sm" onclick="retryConnect()">🔄 Coba Sambungkan Lagi</button>
+  </div>`;
+  content.innerHTML = syncBanner + routeHtml;
   content.scrollTop = SUBSTATE._scrollTop || 0;
 }
 function renderTopbarBadge(){
@@ -1503,9 +1533,9 @@ function groupStandingsCardHtml(g){
 }
 function bestThirdCardHtml(){
   let html = `<div class="section-title">3 Terbaik Antar Grup</div><div class="card">`;
-  const anyResultYet = STATE.matches.some(m=>m.stage==='GROUP' && m.status==='FINISHED');
-  if(!anyResultYet){
-    html += `<div class="empty-state">Akan tampil setelah ada hasil pertandingan grup yang diinput.</div>`;
+  const everyGroupStarted = ['A','B','C'].every(g=> STATE.matches.some(m=>m.group===g && m.stage==='GROUP' && m.status==='FINISHED'));
+  if(!everyGroupStarted){
+    html += `<div class="empty-state">Akan tampil setelah setiap grup (A, B, dan C) punya minimal 1 hasil pertandingan — supaya perbandingannya berdasarkan data asli, bukan grup yang belum mulai.</div>`;
   } else {
     const thirds = bestThirdTable();
     if(!thirds.length) html += `<div class="empty-state">Belum tersedia.</div>`;
@@ -1978,6 +2008,15 @@ function renderAdminSettings(){
       <button class="btn btn-outline btn-sm" onclick="openBulkImportModal()">Impor Data Pemain (RT 01–15)</button>
     </div>
     <div class="card">
+      <label>Cadangan Data (Backup)</label>
+      <p class="hint">Server tidak punya riwayat versi otomatis — kalau ada data yang tertimpa, satu-satunya cara memulihkannya adalah dari file cadangan ini. Unduh sesering mungkin, terutama setelah hari pertandingan.</p>
+      <div class="btn-row">
+        <button class="btn btn-gold btn-sm" onclick="downloadBackup()">💾 Unduh Cadangan Sekarang</button>
+        <label for="restoreFile" class="btn btn-outline btn-sm" style="cursor:pointer;display:inline-flex;">📤 Pulihkan dari File</label>
+        <input type="file" id="restoreFile" accept="application/json" style="display:none;" onchange="handleRestoreFile(this)">
+      </div>
+    </div>
+    <div class="card">
       <label>Ubah PIN Admin</label><input id="setPin" placeholder="PIN baru">
       <button class="btn btn-outline btn-sm" onclick="changePin()">Ubah PIN</button>
     </div>
@@ -1989,6 +2028,54 @@ function renderAdminSettings(){
       <button class="btn btn-outline btn-block" onclick="doLogout()">Keluar dari Mode Admin</button>
     </div>
   `;
+}
+function downloadBackup(){
+  const payload = JSON.stringify(STATE, null, 2);
+  const blob = new Blob([payload], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const stamp = new Date().toISOString().slice(0,16).replace(/[:T]/g,'-');
+  a.href = url;
+  a.download = `backup-pccc-${stamp}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  toast('Cadangan diunduh');
+}
+function handleRestoreFile(input){
+  const file = input.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(ev){
+    let parsed;
+    try{ parsed = JSON.parse(ev.target.result); }
+    catch(e){ toast('File tidak valid — bukan file cadangan JSON'); return; }
+    if(!parsed || !Array.isArray(parsed.teams) || !Array.isArray(parsed.matches)){
+      toast('File tidak dikenali sebagai cadangan Control Center');
+      return;
+    }
+    window._pendingRestore = parsed;
+    showModal(`
+      <div class="sheet-head"><h3>Pulihkan dari Cadangan?</h3><button class="closeX" onclick="closeModal()">✕</button></div>
+      <p class="muted">File ini berisi ${parsed.teams.length} tim, ${parsed.matches.length} pertandingan, dan ${(parsed.players||[]).length} pemain. <b>Ini akan MENGGANTI SELURUH data yang sedang berjalan sekarang</b> di server — tidak bisa dibatalkan.</p>
+      <button class="btn btn-red btn-block" onclick="confirmRestore()">Ya, Timpa dengan Data Cadangan Ini</button>
+    `);
+  };
+  reader.readAsText(file);
+  input.value = '';
+}
+async function confirmRestore(){
+  const data = window._pendingRestore;
+  if(!data){ closeModal(); return; }
+  await mutate(s=>{
+    Object.keys(s).forEach(k=> delete s[k]);
+    Object.assign(s, data);
+  });
+  window._pendingRestore = null;
+  closeModal();
+  toast('Data berhasil dipulihkan dari cadangan');
+  go('dashboard');
 }
 async function saveTournamentName(){
   const name = document.getElementById('setName').value.trim();
@@ -2076,18 +2163,16 @@ function closeModal(){ document.getElementById('modalRoot').innerHTML=''; }
 /* ---------- BOOT ---------- */
 (async function boot(){
   await loadThemePref();
-  const fbReady = await waitForFirebase(6000);
+  const fbReady = await waitForFirebase(15000);
   if(fbReady){
     try{
       await subscribeState();
     }catch(e){
       console.error(e);
       STATE = buildDefaultState();
-      toast('⚠ Gagal terhubung ke server — perubahan tidak akan tersimpan');
     }
   } else {
     STATE = buildDefaultState();
-    toast('⚠ Gagal terhubung ke server — perubahan tidak akan tersimpan');
   }
   render();
 })();
