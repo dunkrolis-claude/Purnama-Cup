@@ -1537,8 +1537,8 @@ function renderTeamDetail(){
   const row = table[pos-1];
   if(row){
     html += `<div class="section-title">Performa Grup ${t.group}</div><div class="card">
-      <table class="standings"><tr><th style="text-align:left;">Pos</th><th>M</th><th>M-S-K</th><th>SG</th><th>P</th></tr>
-        <tr><td style="text-align:left;"><b>${pos}</b></td><td>${row.mp}</td><td>${row.w}-${row.d}-${row.l}</td><td>${row.gd>0?'+':''}${row.gd}</td><td class="pts">${row.pts}</td></tr>
+      <table class="standings"><tr><th style="text-align:left;">Pos</th><th>M</th><th>M-S-K</th><th>SG</th><th>🟨🟥</th><th>P</th></tr>
+        <tr><td style="text-align:left;"><b>${pos}</b></td><td>${row.mp}</td><td>${row.w}-${row.d}-${row.l}</td><td>${row.gd>0?'+':''}${row.gd}</td><td>${row.yellow}-${row.red}</td><td class="pts">${row.pts}</td></tr>
       </table>
     </div>`;
   }
@@ -1625,7 +1625,7 @@ function groupStandingsCardHtml(g){
   return `<div class="card">
     <div class="muted" style="font-weight:700;margin-bottom:6px;">GRUP ${g}</div>
     <table class="standings">
-      <tr><th style="text-align:left;">Pos</th><th>M</th><th>M-S-K</th><th>SG</th><th>P</th></tr>
+      <tr><th style="text-align:left;">Pos</th><th>M</th><th>M-S-K</th><th>SG</th><th>🟨🟥</th><th>P</th></tr>
       ${table.map((t,i)=>{
         let cls='q-out', label='';
         if(i<2){ cls='q-auto'; label=complete?'Lolos':'Sementara'; }
@@ -1633,7 +1633,7 @@ function groupStandingsCardHtml(g){
         else { label = complete? 'Tersingkir' : 'Sementara'; }
         return `<tr class="${cls}" onclick="go('teamdetail',{teamId:'${t.id}'})" style="cursor:pointer;">
           <td style="text-align:left;"><b>${i+1}</b> ${badgeImg(t.id,20,{style:'margin:0 5px -5px 4px;'})}${t.name}</td>
-          <td>${t.mp}</td><td>${t.w}-${t.d}-${t.l}</td><td>${t.gd>0?'+':''}${t.gd}</td><td class="pts">${t.pts}</td>
+          <td>${t.mp}</td><td>${t.w}-${t.d}-${t.l}</td><td>${t.gd>0?'+':''}${t.gd}</td><td>${t.yellow}-${t.red}</td><td class="pts">${t.pts}</td>
         </tr>`;
       }).join('')}
     </table>
@@ -1641,6 +1641,7 @@ function groupStandingsCardHtml(g){
       <span><i style="background:var(--green-500);"></i>Lolos otomatis</span>
       <span><i style="background:var(--gold-500);"></i>Peringkat 3 (race)</span>
     </div>
+    <p class="hint" style="margin:8px 2px 0 2px;">🟨🟥 = total kartu kuning-merah tim (dipakai untuk tie-break poin Fair Play kalau Poin &amp; SG sama).</p>
   </div>`;
 }
 function bestThirdCardHtml(){
@@ -1909,23 +1910,75 @@ function gkCardHtml(){
   html += `</div><p class="hint">GK Terbaik tetap merupakan keputusan panitia berdasarkan data pendukung ini.</p>`;
   return html;
 }
+function computeSuspensions(){
+  const byPlayer = {};
+  STATE.events.forEach(e=>{
+    if(e.type!=='YELLOW_CARD' && e.type!=='RED_CARD') return;
+    const m = matchById(e.matchId);
+    if(!m || m.status!=='FINISHED' || m.stage!=='GROUP') return;
+    byPlayer[e.playerId] = byPlayer[e.playerId] || [];
+    byPlayer[e.playerId].push({type:e.type, date:m.date, time:m.time});
+  });
+  const list = [];
+  Object.keys(byPlayer).forEach(playerId=>{
+    const p = STATE.players.find(pp=>pp.id===playerId);
+    if(!p) return;
+    const evs = byPlayer[playerId].sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
+    let yellow=0, triggers=0, lastTriggerKey=null;
+    evs.forEach(ev=>{
+      if(ev.type==='RED_CARD'){ triggers++; lastTriggerKey = ev.date+ev.time; }
+      else { yellow++; if(yellow%2===0){ triggers++; lastTriggerKey = ev.date+ev.time; } }
+    });
+    if(triggers===0) return;
+    const teamMatches = STATE.matches.filter(m=>m.stage==='GROUP' && (m.home===p.teamId||m.away===p.teamId))
+      .sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
+    const playedAfter = teamMatches.filter(m=> (m.date+m.time) > lastTriggerKey && m.status==='FINISHED').length;
+    const nextMatch = teamMatches.find(m=> (m.date+m.time) > lastTriggerKey);
+    list.push({ playerId, name:p.name, teamId:p.teamId, teamNm:teamName(p.teamId), served: playedAfter>=1, nextMatch });
+  });
+  return list;
+}
+function skorsCardHtml(){
+  const list = computeSuspensions();
+  const active = list.filter(x=>!x.served);
+  const served = list.filter(x=>x.served);
+  let html = `<div class="section-title">Status Skors Pemain</div><div class="card">`;
+  if(!active.length){
+    html += `<div class="empty-state">Tidak ada pemain yang sedang terkena skors.</div>`;
+  } else {
+    html += active.map(x=>{
+      const lawan = x.nextMatch ? teamName(x.nextMatch.home===x.teamId ? x.nextMatch.away : x.nextMatch.home) : null;
+      return `<div class="match-row" style="cursor:default;">
+        <div class="teams"><div class="tname">🚫 ${x.name}</div><div class="vs">${x.teamNm} — dilarang main${lawan?' lawan '+lawan:' di laga berikutnya'}</div></div>
+      </div>`;
+    }).join('');
+  }
+  html += `</div>`;
+  if(served.length){
+    html += `<p class="hint" style="margin:6px 2px 0 2px;">Sudah menjalani skors (boleh main lagi): ${served.map(x=>x.name+' ('+x.teamNm+')').join(', ')}</p>`;
+  }
+  return html;
+}
 function renderStatistik(){
   if(isDesktop()){
     return `<div class="grid-cols-3">
       <div>${topScorerCardHtml()}</div>
       <div>${cardsCardHtml()}</div>
       <div>${gkCardHtml()}</div>
-    </div>`;
+    </div>
+    ${skorsCardHtml()}`;
   }
   const tab = SUBSTATE.sTab || 'scorer';
   let html = `<div class="tabs">
     <div class="tab ${tab==='scorer'?'active':''}" onclick="SUBSTATE.sTab='scorer';render()">TOP SKORER</div>
     <div class="tab ${tab==='cards'?'active':''}" onclick="SUBSTATE.sTab='cards';render()">KARTU</div>
     <div class="tab ${tab==='gk'?'active':''}" onclick="SUBSTATE.sTab='gk';render()">DATA GK</div>
+    <div class="tab ${tab==='skors'?'active':''}" onclick="SUBSTATE.sTab='skors';render()">SKORS</div>
   </div>`;
   if(tab==='scorer') html += `<div class="card">${topScorerListHtml()}</div>`;
   else if(tab==='cards') html += cardsCardHtml().replace('<div class="section-title">Kartu</div>','');
-  else html += gkCardHtml().replace('<div class="section-title">Data GK</div>','');
+  else if(tab==='gk') html += gkCardHtml().replace('<div class="section-title">Data GK</div>','');
+  else html += skorsCardHtml().replace('<div class="section-title">Status Skors Pemain</div>','');
   return html;
 }
 
