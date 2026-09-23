@@ -842,12 +842,15 @@ async function retryConnect(){
 // runTransaction. fn MUST be a pure function of the draft it's given (see the
 // retry-safety review in the migration design doc) — every current call site
 // has been re-verified against this requirement.
-async function mutate(fn, operation){
+async function mutate(fn, operation, explicitPin){
+  const usingExplicitPin = (explicitPin !== undefined && explicitPin !== null);
+  const warn = (msg)=>{ if(!usingExplicitPin) toast(msg); };
   if(!isSynced()){
-    toast('⚠ Belum tersambung ke server — jangan input dulu, coba "Muat Ulang" di atas');
+    warn('⚠ Belum tersambung ke server — jangan input dulu, coba "Muat Ulang" di atas');
     render();
-    return;
+    return { ok:false, error:'not_synced' };
   }
+  const pinToUse = usingExplicitPin ? explicitPin : ADMIN_PIN_CACHE;
   const MAX_ATTEMPTS = 5;
   let attempt = 0;
   let baseState = STATE;
@@ -865,7 +868,7 @@ async function mutate(fn, operation){
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          pin: ADMIN_PIN_CACHE,
+          pin: pinToUse,
           id: window.__sb.TOURNAMENT_ID,
           expectedVersion: currentRevision,
           newState: draft,
@@ -875,15 +878,15 @@ async function mutate(fn, operation){
       res = await r.json();
     }catch(e){
       console.error('Gagal menghubungi gateway', e);
-      toast('⚠ Gagal menyimpan — coba lagi');
+      warn('⚠ Gagal menyimpan — coba lagi');
       render();
-      return;
+      return { ok:false, error:'network_error' };
     }
 
     if(res && res.ok){
       STATE = res.state; REVISION = res.version;
       render();
-      return;
+      return res;
     }
     if(res && res.conflict){
       // Someone else won — refresh to their latest and retry fn() fresh against it.
@@ -892,12 +895,13 @@ async function mutate(fn, operation){
     }
     // not_found / malformed_state / invalid_pin / server_error — not retryable
     console.error('Gagal menyimpan data', res);
-    toast(res && res.error==='invalid_pin' ? '⚠ Sesi admin tidak valid — masuk ulang' : '⚠ Gagal menyimpan — coba lagi');
+    warn(res && res.error==='invalid_pin' ? '⚠ Sesi admin tidak valid — masuk ulang' : '⚠ Gagal menyimpan — coba lagi');
     render();
-    return;
+    return res || { ok:false, error:'server_error' };
   }
-  toast('⚠ Gagal menyimpan setelah beberapa percobaan — coba lagi');
+  warn('⚠ Gagal menyimpan setelah beberapa percobaan — coba lagi');
   render();
+  return { ok:false, error:'retries_exhausted' };
 }
 
 /* ---------- helpers ---------- */
@@ -2436,18 +2440,63 @@ function confirmReset(){
   showModal(`
     <div class="sheet-head"><h3>Reset Data?</h3><button class="closeX" onclick="closeModal()">✕</button></div>
     <p class="muted">Ini akan menghapus SEMUA data (tim kembali ke default, pemain, jadwal, hasil, kartu) dan tidak dapat dibatalkan.</p>
-    <button class="btn btn-red btn-block" onclick="doReset()">Ya, Hapus Semua Data</button>
+    <p class="hint">Untuk melanjutkan, ketik persis <b>RESET TURNAMEN</b> dan masukkan PIN admin.</p>
+    <label>Ketik "RESET TURNAMEN"</label>
+    <input id="resetPhrase" placeholder="RESET TURNAMEN" oninput="updateResetButtonState()">
+    <label>PIN Admin</label>
+    <input id="resetPin" type="password" inputmode="numeric" placeholder="Masukkan PIN" oninput="updateResetButtonState()">
+    <div id="resetErr" class="muted" style="color:var(--red-500);display:none;margin-top:6px;"></div>
+    <button id="resetConfirmBtn" class="btn btn-red btn-block" disabled onclick="doReset()">Ya, Hapus Semua Data</button>
   `);
+  updateResetButtonState();
+}
+function updateResetButtonState(){
+  const phraseEl = document.getElementById('resetPhrase');
+  const pinEl = document.getElementById('resetPin');
+  const btn = document.getElementById('resetConfirmBtn');
+  if(!phraseEl || !pinEl || !btn) return;
+  const phraseOk = phraseEl.value === 'RESET TURNAMEN';
+  const pinOk = pinEl.value.trim().length > 0;
+  btn.disabled = !(phraseOk && pinOk);
 }
 async function doReset(){
+  const phraseEl = document.getElementById('resetPhrase');
+  const pinEl = document.getElementById('resetPin');
+  const errEl = document.getElementById('resetErr');
+  const btn = document.getElementById('resetConfirmBtn');
+  if(!phraseEl || phraseEl.value !== 'RESET TURNAMEN') return; // extra guard, button is already disabled otherwise
+  const typedPin = pinEl.value.trim();
+  if(!typedPin) return;
+
+  btn.disabled = true;
+  btn.textContent = 'Memverifikasi…';
+
   const fresh = buildDefaultState();
-  await mutate(s=>{
+  // PIN is verified server-side, freshly, for this one call — it does NOT reuse or
+  // update the session's cached ADMIN_PIN_CACHE, and STATE.settings.adminPin is never
+  // consulted for authorization. On a wrong PIN, the gateway's verify_admin_pin check
+  // fails before the CAS write ever runs, so no state change happens at all.
+  const res = await mutate(s=>{
     Object.keys(s).forEach(k=> delete s[k]);
     Object.assign(s, fresh);
-  }, 'reset');
-  closeModal();
-  toast('Data turnamen direset');
-  go('dashboard');
+  }, 'reset', typedPin);
+
+  if(res && res.ok){
+    closeModal();
+    toast('Data turnamen direset');
+    go('dashboard');
+    return;
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Ya, Hapus Semua Data';
+  if(errEl){
+    errEl.style.display = 'block';
+    errEl.textContent = (res && res.error === 'invalid_pin')
+      ? '⚠ PIN salah — reset dibatalkan, data tidak berubah.'
+      : '⚠ Gagal reset — coba lagi.';
+  }
+  updateResetButtonState();
 }
 function doLogout(){ IS_ADMIN=false; ADMIN_PIN_CACHE=null; toast('Keluar dari mode admin'); go('dashboard'); }
 
