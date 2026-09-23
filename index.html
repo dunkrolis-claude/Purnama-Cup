@@ -351,25 +351,23 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--gold-500
 <div id="toastRoot"></div>
 
 <script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
-  import { getFirestore, doc, getDoc, setDoc, onSnapshot, runTransaction } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
+  // ============================================================
+  // PRODUCTION SUPABASE BRIDGE
+  // As of the Firebase -> Supabase cutover, project pccc-staging
+  // (gvrcakzibjdxtpiqepdo) is the permanent production database.
+  // ============================================================
+  import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-  const firebaseConfig = {
-    apiKey: "AIzaSyBHQO9L5HQdFhjVTL4nQByaYS5fgEaMTi8",
-    authDomain: "purnamacup.firebaseapp.com",
-    projectId: "purnamacup",
-    storageBucket: "purnamacup.firebasestorage.app",
-    messagingSenderId: "994165959741",
-    appId: "1:994165959741:web:b14edbcf54c8a0b0f54e54",
-    measurementId: "G-46PSBMVVBB"
-  };
+  const SUPABASE_URL = "https://gvrcakzibjdxtpiqepdo.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd2cmNha3ppYmpkeHRwaXFlcGRvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAxMDMxNDQsImV4cCI6MjEwNTY3OTE0NH0.XMRoJvjSPmPdfSIpx27kkvfKXtSzbHNtDYAhmLkNDZg";
+  const TOURNAMENT_ID = "pccc";
 
-  const app = initializeApp(firebaseConfig);
-  const db = getFirestore(app);
-  const stateDocRef = doc(db, "pccc", "state");
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { persistSession: false }
+  });
 
-  window.__fb = { doc, getDoc, setDoc, onSnapshot, runTransaction, db, stateDocRef };
-  window.dispatchEvent(new Event("firebase-ready"));
+  window.__sb = { supabase, TOURNAMENT_ID };
+  window.dispatchEvent(new Event("supabase-ready"));
 </script>
 <script>
 /* ============================================================
@@ -752,82 +750,158 @@ function generateGroupSchedule(teams, startDateStr){
   return matches;
 }
 
-/* ---------- persistence (Firebase Firestore) ---------- */
-let SYNCED = false; // true only once we've confirmed a real Firestore sync
+/* ---------- persistence (Supabase) ---------- */
+// SYNCED is derived: true only once we have a real DATABASE REVISION from Supabase.
+// REVISION is the DATABASE REVISION (tournament_states.version) — a pure concurrency
+// token, completely separate from STATE.version (the app's own schema-version field
+// inside the JSONB blob, which the RPC never reads and never writes to).
+let REVISION = null;
+function isSynced(){ return REVISION !== null; }
+let _realtimeChannel = null;
+let ADMIN_PIN_CACHE = null; // held in memory only for this tab's session, never persisted
 
-function waitForFirebase(timeoutMs){
+function waitForSupabase(timeoutMs){
   return new Promise((resolve)=>{
-    if(window.__fb){ resolve(true); return; }
-    const timer = setTimeout(()=>{ window.removeEventListener('firebase-ready', handler); resolve(false); }, timeoutMs);
-    function handler(){ clearTimeout(timer); window.removeEventListener('firebase-ready', handler); resolve(true); }
-    window.addEventListener('firebase-ready', handler);
+    if(window.__sb){ resolve(true); return; }
+    const timer = setTimeout(()=>{ window.removeEventListener('supabase-ready', handler); resolve(false); }, timeoutMs);
+    function handler(){ clearTimeout(timer); window.removeEventListener('supabase-ready', handler); resolve(true); }
+    window.addEventListener('supabase-ready', handler);
   });
 }
+
+function applyIncomingRevision(newState, newRevision, isRealtimeEvent){
+  // Ignore anything that isn't strictly newer than what we already know — this single
+  // rule absorbs BOTH our own write-echo AND any stale/duplicate realtime delivery.
+  if(REVISION !== null && newRevision <= REVISION) return;
+  STATE = newState;
+  REVISION = newRevision;
+  if(isRealtimeEvent) render();
+}
+
 function subscribeState(){
-  const { getDoc, setDoc, onSnapshot, stateDocRef } = window.__fb;
+  const { supabase, TOURNAMENT_ID } = window.__sb;
   return new Promise((resolve)=>{
     let firstLoad = true;
-    onSnapshot(stateDocRef, async (snap)=>{
-      try{
-        if(snap.exists() && snap.data().json){
-          STATE = JSON.parse(snap.data().json);
-          SYNCED = true;
-        } else if(firstLoad){
-          STATE = buildDefaultState();
-          await setDoc(stateDocRef, { json: JSON.stringify(STATE), updatedAt: Date.now() });
-          SYNCED = true;
+    let bufferedEvents = [];
+
+    // 1) Subscribe FIRST (buffer events) so nothing lands in the gap before the
+    //    initial SELECT below — closes the classic "missed the write that happened
+    //    between select and subscribe" race.
+    _realtimeChannel = supabase
+      .channel('tournament_states_' + TOURNAMENT_ID)
+      .on('postgres_changes', {
+        event: 'UPDATE', schema: 'public', table: 'tournament_states',
+        filter: 'id=eq.' + TOURNAMENT_ID
+      }, (payload)=>{
+        const row = payload.new;
+        if(!row) return;
+        if(firstLoad){ bufferedEvents.push(row); return; }
+        applyIncomingRevision(row.state, row.version, true);
+      })
+      .subscribe();
+
+    // 2) Initial SELECT.
+    supabase.from('tournament_states')
+      .select('state, version, updated_at')
+      .eq('id', TOURNAMENT_ID)
+      .single()
+      .then(({ data, error })=>{
+        if(error || !data){
+          console.error('Gagal membaca data awal', error);
+          // Could not confirm real data — local placeholder only.
+          // REVISION stays null so nothing gets written over the real row.
+          if(firstLoad){ STATE = buildDefaultState(); firstLoad = false; resolve(); }
+          return;
         }
-      }catch(e){
-        console.error('Gagal membaca data', e);
-        if(firstLoad && !STATE) STATE = buildDefaultState();
-      }
-      if(firstLoad){ firstLoad = false; resolve(); }
-      else { render(); } // real-time update pushed from another device
-    }, (err)=>{
-      console.error('Firestore error', err);
-      if(firstLoad){
-        // Could not confirm real data — show a local placeholder only.
-        // SYNCED stays false so nothing gets written over the real doc.
-        STATE = buildDefaultState();
+        // 3) Reconcile against anything buffered while we were selecting.
+        let best = { state: data.state, version: data.version };
+        bufferedEvents.forEach(row=>{
+          if(row.version > best.version) best = { state: row.state, version: row.version };
+        });
+        bufferedEvents = [];
+        STATE = best.state;
+        REVISION = best.version;
         firstLoad = false;
         resolve();
-      }
-    });
+      });
   });
 }
+
 async function retryConnect(){
   toast('Mencoba menyambung ulang…');
-  const fbReady = await waitForFirebase(15000);
-  if(fbReady && !SYNCED){
+  if(_realtimeChannel){ try{ window.__sb.supabase.removeChannel(_realtimeChannel); }catch(e){} }
+  const sbReady = await waitForSupabase(15000);
+  if(sbReady && !isSynced()){
     try{ await subscribeState(); }catch(e){ console.error(e); }
   }
   render();
-  if(SYNCED) toast('✓ Tersambung ke server');
+  if(isSynced()) toast('✓ Tersambung ke server');
 }
-async function mutate(fn){
-  if(!SYNCED){
-    toast('⚠ Belum tersambung ke server — jangan input dulu, coba "Muat Ulang" di atas');
+
+// mutate(fn, operation) — client-side CAS retry loop, replacing Firestore's
+// runTransaction. fn MUST be a pure function of the draft it's given (see the
+// retry-safety review in the migration design doc) — every current call site
+// has been re-verified against this requirement.
+async function mutate(fn, operation, explicitPin){
+  const usingExplicitPin = (explicitPin !== undefined && explicitPin !== null);
+  const warn = (msg)=>{ if(!usingExplicitPin) toast(msg); };
+  if(!isSynced()){
+    warn('⚠ Belum tersambung ke server — jangan input dulu, coba "Muat Ulang" di atas');
     render();
-    return;
+    return { ok:false, error:'not_synced' };
   }
-  try{
-    const { runTransaction, db, stateDocRef } = window.__fb;
-    let applied = null;
-    await runTransaction(db, async (tx)=>{
-      const snap = await tx.get(stateDocRef);
-      // Always mutate the server's current data, never a possibly-stale local copy —
-      // this is what prevents two admins editing at once from clobbering each other.
-      const latest = (snap.exists() && snap.data().json) ? JSON.parse(snap.data().json) : STATE;
-      fn(latest);
-      tx.set(stateDocRef, { json: JSON.stringify(latest), updatedAt: Date.now() });
-      applied = latest;
-    });
-    if(applied) STATE = applied; // reflect immediately; onSnapshot echo will confirm it
-  }catch(e){
-    console.error('Gagal menyimpan data', e);
-    toast('⚠ Gagal menyimpan — coba lagi');
+  const pinToUse = usingExplicitPin ? explicitPin : ADMIN_PIN_CACHE;
+  const MAX_ATTEMPTS = 5;
+  let attempt = 0;
+  let baseState = STATE;
+  let currentRevision = REVISION;
+
+  while(attempt < MAX_ATTEMPTS){
+    attempt++;
+    let draft;
+    try{ draft = JSON.parse(JSON.stringify(baseState)); }catch(e){ draft = structuredClone(baseState); }
+    fn(draft);
+
+    let res;
+    try{
+      const r = await fetch('/api/admin-mutate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pin: pinToUse,
+          id: window.__sb.TOURNAMENT_ID,
+          expectedVersion: currentRevision,
+          newState: draft,
+          operation: operation || 'write'
+        })
+      });
+      res = await r.json();
+    }catch(e){
+      console.error('Gagal menghubungi gateway', e);
+      warn('⚠ Gagal menyimpan — coba lagi');
+      render();
+      return { ok:false, error:'network_error' };
+    }
+
+    if(res && res.ok){
+      STATE = res.state; REVISION = res.version;
+      render();
+      return res;
+    }
+    if(res && res.conflict){
+      // Someone else won — refresh to their latest and retry fn() fresh against it.
+      baseState = res.state; currentRevision = res.version;
+      continue;
+    }
+    // not_found / malformed_state / invalid_pin / server_error — not retryable
+    console.error('Gagal menyimpan data', res);
+    warn(res && res.error==='invalid_pin' ? '⚠ Sesi admin tidak valid — masuk ulang' : '⚠ Gagal menyimpan — coba lagi');
+    render();
+    return res || { ok:false, error:'server_error' };
   }
+  warn('⚠ Gagal menyimpan setelah beberapa percobaan — coba lagi');
   render();
+  return { ok:false, error:'retries_exhausted' };
 }
 
 /* ---------- helpers ---------- */
@@ -1039,7 +1113,7 @@ function render(){
     'admin-players': renderAdminPlayers,
     'admin-settings': renderAdminSettings
   }[ROUTE] || renderDashboard)();
-  const syncBanner = SYNCED ? '' : `<div class="card" style="border-color:var(--red-500);text-align:center;padding:14px;">
+  const syncBanner = isSynced() ? '' : `<div class="card" style="border-color:var(--red-500);text-align:center;padding:14px;">
     <div style="font-weight:700;color:var(--pill-live-fg);margin-bottom:4px;">⚠ Belum tersambung ke server</div>
     <div class="muted" style="font-size:12px;margin-bottom:10px;">Data yang tampil mungkin belum yang terbaru, dan input baru <b>tidak akan tersimpan</b> sampai tersambung. Cek koneksi internet lalu coba lagi.</div>
     <button class="btn btn-gold btn-sm" onclick="retryConnect()">🔄 Coba Sambungkan Lagi</button>
@@ -1287,7 +1361,7 @@ async function confirmRegen(){
     s.matches = buildFixedSchedule();
     s.events = [];
     s.knockout = { pairsLocked:false, qfPairs:null, sfPairs:null, finalPair:null, seedOrder:null };
-  });
+  }, 'regen_schedule');
   closeModal();
   toast('Jadwal resmi dimuat ulang');
   go('jadwal');
@@ -1848,26 +1922,29 @@ function matchWinner(m){
 async function generateSemifinal(){
   const qf = koMatchesByRound('Perempat Final');
   const w = qf.map(matchWinner);
+  // Computed ONCE, outside mutate(): fn() must be a pure function of its draft so it
+  // can be safely re-run on a CAS retry — reading the wall clock inside fn() would
+  // make the outcome depend on which attempt happens to succeed.
+  const base = new Date(); base.setDate(base.getDate()+7);
+  const date = base.toISOString().slice(0,10);
   await mutate(s=>{
-    const base = new Date(); base.setDate(base.getDate()+7);
-    const date = base.toISOString().slice(0,10);
     s.matches.push({id:uid('m'),week:null,date,time:'14:00',stage:'KO',round:'Semifinal',group:null,home:w[0],away:w[1],status:'SCHEDULED',note:''});
     s.matches.push({id:uid('m'),week:null,date,time:'16:00',stage:'KO',round:'Semifinal',group:null,home:w[2],away:w[3],status:'SCHEDULED',note:''});
-  });
+  }, 'generate_semifinal');
   toast('Jadwal semifinal dibuat');
 }
 async function generateFinal(){
   const sf = koMatchesByRound('Semifinal');
   const w = sf.map(matchWinner);
   const l = sf.map((m,i)=> matchWinner(m)===m.home ? m.away : m.home);
+  const base = new Date(); base.setDate(base.getDate()+7);
+  const date = base.toISOString().slice(0,10);
   await mutate(s=>{
-    const base = new Date(); base.setDate(base.getDate()+7);
-    const date = base.toISOString().slice(0,10);
     if(s.settings.thirdPlaceMatch){
       s.matches.push({id:uid('m'),week:null,date,time:'13:00',stage:'KO',round:'Perebutan Juara 3',group:null,home:l[0],away:l[1],status:'SCHEDULED',note:''});
     }
     s.matches.push({id:uid('m'),week:null,date,time:'15:30',stage:'KO',round:'Final',group:null,home:w[0],away:w[1],status:'SCHEDULED',note:''});
-  });
+  }, 'generate_final');
   toast('Jadwal final dibuat');
 }
 
@@ -2322,7 +2399,7 @@ async function confirmRestore(){
   await mutate(s=>{
     Object.keys(s).forEach(k=> delete s[k]);
     Object.assign(s, data);
-  });
+  }, 'restore');
   window._pendingRestore = null;
   closeModal();
   toast('Data berhasil dipulihkan dari cadangan');
@@ -2337,32 +2414,91 @@ async function saveTournamentName(){
 async function changePin(){
   const pin = document.getElementById('setPin').value.trim();
   if(!pin || pin.length<4){ toast('PIN minimal 4 digit'); return; }
-  await mutate(s=>{ s.settings.adminPin = pin; });
-  toast('PIN admin diperbarui');
+  let res;
+  try{
+    const r = await fetch('/api/admin-change-pin', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ pin: ADMIN_PIN_CACHE, newPin: pin })
+    });
+    res = await r.json();
+  }catch(e){
+    toast('⚠ Tidak bisa menghubungi server — coba lagi');
+    return;
+  }
+  if(res && res.ok){
+    ADMIN_PIN_CACHE = pin;
+    // NOTE: STATE.settings.adminPin is intentionally NOT updated here — it is kept
+    // only for backward-compat display with old Firebase-era backups and must never
+    // be treated as authoritative. Writing the real new PIN there would recreate the
+    // exact "PIN sits in plaintext in public data" leak this migration closes.
+    toast('PIN admin diperbarui');
+  } else {
+    toast('⚠ Gagal mengubah PIN — PIN lama salah?');
+  }
 }
 function confirmReset(){
   showModal(`
     <div class="sheet-head"><h3>Reset Data?</h3><button class="closeX" onclick="closeModal()">✕</button></div>
     <p class="muted">Ini akan menghapus SEMUA data (tim kembali ke default, pemain, jadwal, hasil, kartu) dan tidak dapat dibatalkan.</p>
-    <button class="btn btn-red btn-block" onclick="doReset()">Ya, Hapus Semua Data</button>
+    <p class="hint">Untuk melanjutkan, ketik persis <b>RESET TURNAMEN</b> dan masukkan PIN admin.</p>
+    <label>Ketik "RESET TURNAMEN"</label>
+    <input id="resetPhrase" placeholder="RESET TURNAMEN" oninput="updateResetButtonState()">
+    <label>PIN Admin</label>
+    <input id="resetPin" type="password" inputmode="numeric" placeholder="Masukkan PIN" oninput="updateResetButtonState()">
+    <div id="resetErr" class="muted" style="color:var(--red-500);display:none;margin-top:6px;"></div>
+    <button id="resetConfirmBtn" class="btn btn-red btn-block" disabled onclick="doReset()">Ya, Hapus Semua Data</button>
   `);
+  updateResetButtonState();
+}
+function updateResetButtonState(){
+  const phraseEl = document.getElementById('resetPhrase');
+  const pinEl = document.getElementById('resetPin');
+  const btn = document.getElementById('resetConfirmBtn');
+  if(!phraseEl || !pinEl || !btn) return;
+  const phraseOk = phraseEl.value === 'RESET TURNAMEN';
+  const pinOk = pinEl.value.trim().length > 0;
+  btn.disabled = !(phraseOk && pinOk);
 }
 async function doReset(){
+  const phraseEl = document.getElementById('resetPhrase');
+  const pinEl = document.getElementById('resetPin');
+  const errEl = document.getElementById('resetErr');
+  const btn = document.getElementById('resetConfirmBtn');
+  if(!phraseEl || phraseEl.value !== 'RESET TURNAMEN') return; // extra guard, button is already disabled otherwise
+  const typedPin = pinEl.value.trim();
+  if(!typedPin) return;
+
+  btn.disabled = true;
+  btn.textContent = 'Memverifikasi…';
+
   const fresh = buildDefaultState();
-  try{
-    const { setDoc, stateDocRef } = window.__fb;
-    await setDoc(stateDocRef, { json: JSON.stringify(fresh), updatedAt: Date.now() });
-    STATE = fresh;
-  }catch(e){
-    console.error('Gagal reset data', e);
-    toast('⚠ Gagal reset — coba lagi');
+  // PIN is verified server-side, freshly, for this one call — it does NOT reuse or
+  // update the session's cached ADMIN_PIN_CACHE, and STATE.settings.adminPin is never
+  // consulted for authorization. On a wrong PIN, the gateway's verify_admin_pin check
+  // fails before the CAS write ever runs, so no state change happens at all.
+  const res = await mutate(s=>{
+    Object.keys(s).forEach(k=> delete s[k]);
+    Object.assign(s, fresh);
+  }, 'reset', typedPin);
+
+  if(res && res.ok){
+    closeModal();
+    toast('Data turnamen direset');
+    go('dashboard');
     return;
   }
-  closeModal();
-  toast('Data turnamen direset');
-  go('dashboard');
+
+  btn.disabled = false;
+  btn.textContent = 'Ya, Hapus Semua Data';
+  if(errEl){
+    errEl.style.display = 'block';
+    errEl.textContent = (res && res.error === 'invalid_pin')
+      ? '⚠ PIN salah — reset dibatalkan, data tidak berubah.'
+      : '⚠ Gagal reset — coba lagi.';
+  }
+  updateResetButtonState();
 }
-function doLogout(){ IS_ADMIN=false; toast('Keluar dari mode admin'); go('dashboard'); }
+function doLogout(){ IS_ADMIN=false; ADMIN_PIN_CACHE=null; toast('Keluar dari mode admin'); go('dashboard'); }
 
 /* ---------- ADMIN GATE ---------- */
 function requireAdmin(){ return IS_ADMIN; }
@@ -2381,9 +2517,21 @@ function openLogin(){
     <button class="btn btn-gold btn-block" onclick="tryLogin()">Masuk</button>
   `);
 }
-function tryLogin(){
+async function tryLogin(){
   const val = document.getElementById('pinInput').value;
-  if(val === STATE.settings.adminPin){
+  let res;
+  try{
+    const r = await fetch('/api/admin-login', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ pin: val })
+    });
+    res = await r.json();
+  }catch(e){
+    toast('⚠ Tidak bisa menghubungi server login — coba lagi');
+    return;
+  }
+  if(res && res.ok){
+    ADMIN_PIN_CACHE = val; // kept in memory only for this tab's session, never persisted
     IS_ADMIN = true;
     closeModal();
     toast('Berhasil masuk sebagai admin');
@@ -2422,8 +2570,8 @@ function closeModal(){ document.getElementById('modalRoot').innerHTML=''; }
 /* ---------- BOOT ---------- */
 (async function boot(){
   await loadThemePref();
-  const fbReady = await waitForFirebase(15000);
-  if(fbReady){
+  const sbReady = await waitForSupabase(15000);
+  if(sbReady){
     try{
       await subscribeState();
     }catch(e){
